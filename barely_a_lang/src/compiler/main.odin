@@ -36,12 +36,12 @@ main :: proc() {
     out := strings.builder_make_none()
     defer strings.builder_destroy(&out)
 
+    strings.write_string(&out, "section .bss\n")
+    strings.write_string(&out, "  buffer resb 16\n")
+
     strings.write_string(&out, "section .text\n")
     strings.write_string(&out, "  global _start\n")
     strings.write_string(&out, "  _start: ; entry point\n")
-
-    // TODO remove
-    strings.write_string(&out, "    push 0\n")
 
     string_constants: [dynamic]string
 
@@ -54,9 +54,22 @@ main :: proc() {
         case "ADD":
 
         case "SUB":
-
+            strings.write_string(&out, "    ; SUB\n")
+            strings.write_string(&out, "    pop rax ; pop rhs from stack\n")
+            strings.write_string(&out, "    pop rbx ; pop lhs from stack\n")
+            strings.write_string(&out, "    sub rbx, rax ; subtract\n")
+            strings.write_string(&out, "    push rbx ; push back to stack\n")
         case "READ":
-
+            strings.write_string(&out, "    ; READ\n")
+            strings.write_string(&out, "    mov rax, 0 ; syscall: read\n")
+            strings.write_string(&out, "    mov rdi, 0 ; arg0: fd (stdin)\n")
+            strings.write_string(&out, "    lea rsi, [buffer] ; arg1: buf*\n")
+            strings.write_string(&out, "    mov rdx, 16 ; arg2: buf_len\n")
+            strings.write_string(&out, "    syscall ; call kernel\n")
+            strings.write_string(&out, "    \n")
+            buffer_string_to_int(&out)
+            strings.write_string(&out, "    \n")
+            strings.write_string(&out, "    push rax ; push result to stack\n")
         case "PRINT":
             index += 1
             if index == len(tokens) {
@@ -128,4 +141,25 @@ main :: proc() {
     }
 
     os.write_entire_file("out.asm", transmute([]u8) strings.to_string(out))
+}
+
+buffer_string_to_int_index := 0
+buffer_string_to_int :: proc(out: ^strings.Builder) {
+    index_data: [256]byte
+    index_str := strconv.itoa(index_data[:], buffer_string_to_int_index)
+    buffer_string_to_int_index += 1
+
+    strings.write_string(out, "    ; buffer_string_to_int\n")
+    strings.write_string(out, "    xor rax, rax ; clear out rax?\n")
+    strings.write_string(out, strings.concatenate({ "  buffer_string_to_int_loop_", index_str, ":\n" }))
+    strings.write_string(out, "    movzx rdx, byte [rsi] ; move first byte of of rsi into rdx\n")
+    strings.write_string(out, "    cmp rdx, 0x0A ; check for new line\n")
+    strings.write_string(out, strings.concatenate({ "    je buffer_string_to_int_end_", index_str, " ; jump to end\n" }))
+    strings.write_string(out, "    imul rax, 10 ; multiply result by 10\n")
+    strings.write_string(out, "    sub rdx, '0' ; subtract '0' to get get int value of char\n")
+    strings.write_string(out, "    add rax, rdx ; add int value of char to result\n")
+    strings.write_string(out, "    inc rsi ; move to next char\n")
+    strings.write_string(out, strings.concatenate({ "    jmp buffer_string_to_int_loop_", index_str, " ; jump to top of loop\n" }))
+
+    strings.write_string(out, strings.concatenate({ "  buffer_string_to_int_end_", index_str, ":\n" }))
 }
