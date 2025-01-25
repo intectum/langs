@@ -73,14 +73,10 @@ main :: proc() {
 
             strings.write_string(&out, "    ; PRINT\n")
             strings.write_string(&out, "    mov rax, 1 ; syscall: write\n")
-            strings.write_string(&out, "    mov rdi, 1 ; stdout\n")
-            strings.write_string(&out, "    mov rsi, str_")
-            strings.write_string(&out, str)
-            strings.write_string(&out, "\n")
-            strings.write_string(&out, "    mov rdx, str_len_")
-            strings.write_string(&out, str)
-            strings.write_string(&out, "\n")
-            strings.write_string(&out, "    syscall\n")
+            strings.write_string(&out, "    mov rdi, 1 ; arg0: fd (stdout)\n")
+            strings.write_string(&out, strings.concatenate({ "    mov rsi, str_", str, " ; arg1: buf*\n" }))
+            strings.write_string(&out, strings.concatenate({ "    mov rdx, str_len_", str, " ; arg2: buf_len\n" }))
+            strings.write_string(&out, "    syscall ; call kernel\n")
         case "JUMP.EQ.0":
             index += 1
             if index == len(tokens) {
@@ -89,11 +85,8 @@ main :: proc() {
             }
 
             strings.write_string(&out, "    ; JUMP.EQ.0\n")
-            strings.write_string(&out, "    mov rax, [rsp]\n")
-            strings.write_string(&out, "    cmp rax, 0\n")
-            strings.write_string(&out, "    jz ")
-            strings.write_string(&out, tokens[index])
-            strings.write_string(&out, "\n")
+            strings.write_string(&out, "    cmp QWORD [rsp], 0 ; compare top of stack (64bits) to 0\n")
+            strings.write_string(&out, strings.concatenate({ "    jz ", tokens[index], " ; jump if zero\n" }))
         case "JUMP.GT.0":
             index += 1
             if index == len(tokens) {
@@ -102,16 +95,13 @@ main :: proc() {
             }
 
             strings.write_string(&out, "    ; JUMP.GT.0\n")
-            strings.write_string(&out, "    mov rax, [rsp]\n")
-            strings.write_string(&out, "    cmp rax, 0\n")
-            strings.write_string(&out, "    ja ")
-            strings.write_string(&out, tokens[index])
-            strings.write_string(&out, "\n")
+            strings.write_string(&out, "    cmp QWORD [rsp], 0 ; compare top of stack (64bits) to 0\n")
+            strings.write_string(&out, strings.concatenate({ "    ja ", tokens[index], " ; jump if above\n" }))
         case "HALT":
             strings.write_string(&out, "    ; HALT\n")
             strings.write_string(&out, "    mov rax, 60 ; syscall: exit\n")
-            strings.write_string(&out, "    mov rdi, 0 ; exit code\n")
-            strings.write_string(&out, "    syscall\n")
+            strings.write_string(&out, "    mov rdi, 0 ; arg0: exit_code\n")
+            strings.write_string(&out, "    syscall ; call kernel\n")
         case:
             if strings.has_suffix(token, ":") {
                 strings.write_string(&out, "  ")
@@ -133,18 +123,8 @@ main :: proc() {
         length_data: [256]byte
         length_str := strconv.itoa(length_data[:], len(string_constant) + 3)
 
-        strings.write_string(&out, "  str_")
-        strings.write_string(&out, index_str)
-        strings.write_string(&out, ": db \"")
-        strings.write_string(&out, string_constant)
-        strings.write_string(&out, "\", ")
-        strings.write_string(&out, length_str)
-        strings.write_string(&out, "\n")
-        strings.write_string(&out, "  str_len_")
-        strings.write_string(&out, index_str)
-        strings.write_string(&out, ": equ $-str_")
-        strings.write_string(&out, index_str)
-        strings.write_string(&out, "\n")
+        strings.write_string(&out, strings.concatenate({ "  str_", index_str, ": db \"", string_constant, "\", ", length_str, "\n" }))
+        strings.write_string(&out, strings.concatenate({ "  str_len_", index_str, ": equ $-str_", index_str, "\n" }))
     }
 
     os.write_entire_file("out.asm", transmute([]u8) strings.to_string(out))
