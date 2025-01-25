@@ -93,10 +93,10 @@ main :: proc() {
     stack: [dynamic]i64
 
     jump_type :: enum { NONE, EQ_0, GT_0 }
-    current_jump_type := jump_type.NONE
 
     for index := 0; index < len(tokens); index += 1 {
         token := tokens[index]
+        current_jump_type := jump_type.NONE
 
         switch token {
         case "PUSH":
@@ -152,16 +152,21 @@ main :: proc() {
             msg := tokens[index]
             fmt.println(msg)
         case "JUMP.EQ.0":
-            if current_jump_type == jump_type.NONE {
-                current_jump_type = jump_type.EQ_0
-            }
-            fallthrough
+            current_jump_type = jump_type.EQ_0
         case "JUMP.GT.0":
-            if current_jump_type == jump_type.NONE {
-                current_jump_type = jump_type.GT_0
+            current_jump_type = jump_type.GT_0
+        case "HALT":
+            return
+        case:
+            if strings.has_suffix(token, ":") {
+                continue
             }
-            fallthrough
-        case "JUMP.ANY":
+
+            fmt.printfln("Unknown token %s", token)
+            os.exit(1)
+        }
+
+        if current_jump_type != jump_type.NONE {
             index += 1
             if index == len(tokens) {
                 fmt.printfln("Nothing to jump to")
@@ -178,15 +183,14 @@ main :: proc() {
             jump_label := strings.concatenate({tokens[index], ":"});
 
             switch current_jump_type {
-                case .NONE:
-                    break
-                case .EQ_0:
-                    jump = jump_input == 0
-                case .GT_0:
-                    jump = jump_input > 0
+            case .NONE:
+                break
+            case .EQ_0:
+                jump = jump_input == 0
+            case .GT_0:
+                jump = jump_input > 0
             }
 
-            current_jump_type = jump_type.NONE
             if !jump {
                 continue
             }
@@ -204,15 +208,6 @@ main :: proc() {
                 fmt.printfln("Label not found")
                 os.exit(1)
             }
-        case "HALT":
-            return
-        case:
-            if strings.has_suffix(token, ":") {
-                continue
-            }
-
-            fmt.printfln("Unknown token %s", token)
-            os.exit(1)
         }
     }
 }
