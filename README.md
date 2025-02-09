@@ -6,6 +6,10 @@ NOTE: I am not currently accepting PRs for these projects. For continuity with t
 
 ## Series
 
-### Barely a Lang ([code](https://github.com/intectum/langs/tree/main/barely_a_lang))
+### Bangalang ([code](https://github.com/intectum/coding-sessions/tree/main/bangalang))
+
+A proof of concept for a language that can run on the CPU and the GPU.
+
+### Barely a Lang ([code](https://github.com/intectum/coding-sessions/tree/main/barely_a_lang))
 
 A very simple interpreter and compiler for the very simple language dubbed "Barely a Lang".
