@@ -64,24 +64,30 @@ main :: proc()
           var_pointer := stack_vars[tokens[index + 2].value]
           var_offset := stack_pointer - var_pointer
           fmt.fprintfln(asm_file, "  mov rax, [rsp+%i] ; value to register", var_offset)
-          fmt.fprintln(asm_file, "  mov [rsp], rax ; assign value")
-          stack_vars[tokens[index].value] = stack_pointer
-
-          fmt.fprintln(asm_file, "  sub rsp, 8 ; allocate space on stack")
-          stack_pointer += 8
         }
         else if tokens[index + 2].type == .INTEGER_LITERAL
         {
-          fmt.fprintfln(asm_file, "  mov QWORD [rsp], %s ; assign value", tokens[index + 2].value)
-          stack_vars[tokens[index].value] = stack_pointer
-
-          fmt.fprintln(asm_file, "  sub rsp, 8 ; allocate space on stack")
-          stack_pointer += 8
+          fmt.fprintfln(asm_file, "  mov rax, %s ; assign value", tokens[index + 2].value)
         }
         else
         {
           fmt.println("Invalid statement")
           os.exit(1)
+        }
+
+        if tokens[index].value in stack_vars
+        {
+          var_pointer := stack_vars[tokens[index].value]
+          var_offset := stack_pointer - var_pointer
+          fmt.fprintfln(asm_file, "  mov [rsp+%i], rax ; assign value", var_offset)
+        }
+        else
+        {
+          fmt.fprintln(asm_file, "  mov [rsp], rax ; assign value")
+          stack_vars[tokens[index].value] = stack_pointer
+
+          fmt.fprintln(asm_file, "  sub rsp, 8 ; allocate space on stack")
+          stack_pointer += 8
         }
 
         index += 3
