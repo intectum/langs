@@ -4,10 +4,23 @@ import "core:fmt"
 import "core:os"
 import "core:strings"
 
-tokenize :: proc(src: string) -> [dynamic]string
+token_type :: enum
 {
-  tokens: [dynamic]string
+  OPENING_BRACKET,
+  CLOSING_BRACKET,
+  EQUALS,
+  IDENTIFIER,
+  INTEGER_LITERAL
+}
 
+token :: struct
+{
+  type: token_type,
+  value: string
+}
+
+tokenize :: proc(src: string) -> (tokens: [dynamic]token)
+{
   for index := 0; index < len(src); index += 1
   {
     if strings.is_space(rune(src[index]))
@@ -16,28 +29,28 @@ tokenize :: proc(src: string) -> [dynamic]string
     }
     else if src[index] == '('
     {
-      append(&tokens, "(")
+      append(&tokens, token { .OPENING_BRACKET, "(" })
     }
     else if src[index] == ')'
     {
-      append(&tokens, ")")
+      append(&tokens, token { .CLOSING_BRACKET, ")" })
     }
-    else if src[index] == 'e'
+    else if src[index] == '='
     {
-      if index > len(src) - 3
+      append(&tokens, token { .EQUALS, "=" })
+    }
+    else if (src[index] >= 'a' && src[index] <= 'z') || (src[index] >= 'A' && src[index] <= 'Z') || src[index] == '_'
+    {
+      start_index := index
+      end_index := index + 1
+
+      for (src[end_index] >= 'a' && src[end_index] <= 'z') || (src[end_index] >= 'A' && src[end_index] <= 'Z') || src[end_index] == '_' || (src[end_index] >= '0' && src[end_index] <= '9')
       {
-        fmt.println("Not enough space for 'exit'")
-        os.exit(1)
+        end_index += 1
       }
 
-      if src[index + 1] != 'x' || src[index + 2] != 'i' || src[index + 3] != 't'
-      {
-        fmt.println("You spelled exit wrong ya dummy")
-        os.exit(1)
-      }
-
-      append(&tokens, "exit")
-      index += 3
+      append(&tokens, token { .IDENTIFIER, src[start_index:end_index] })
+      index = end_index - 1
     }
     else if (src[index] >= '0' && src[index] <= '9') || src[index] == '-'
     {
@@ -55,7 +68,7 @@ tokenize :: proc(src: string) -> [dynamic]string
         os.exit(1)
       }
 
-      append(&tokens, src[start_index:end_index])
+      append(&tokens, token { .INTEGER_LITERAL, src[start_index:end_index] })
       index = end_index - 1
     }
     else
@@ -65,5 +78,5 @@ tokenize :: proc(src: string) -> [dynamic]string
     }
   }
 
-  return tokens
+  return
 }
