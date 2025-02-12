@@ -38,6 +38,8 @@ generate_statement :: proc(file: os.Handle, node: ast_node, stack: ^stack)
 {
     #partial switch node.type
     {
+    case .DECLARATION_STATEMENT:
+        generate_declaration_statement(file, node, stack)
     case .ASSIGNMENT_STATEMENT:
         generate_assignment_statement(file, node, stack)
     case .EXIT_STATEMENT:
@@ -46,6 +48,48 @@ generate_statement :: proc(file: os.Handle, node: ast_node, stack: ^stack)
         fmt.println("Invalid statement")
         os.exit(1)
     }
+}
+
+generate_declaration_statement :: proc(file: os.Handle, node: ast_node, stack: ^stack)
+{
+    fmt.fprintln(file, "  ; declare")
+
+    lhs_node := node.children[0]
+    rhs_node := node.children[1]
+
+    if rhs_node.children[0].type == .IDENTIFIER
+    {
+        if !(rhs_node.children[0].value in stack.vars)
+        {
+            fmt.printfln("Undeclared identifier: %s", rhs_node.children[0].value)
+            os.exit(1)
+        }
+
+        var_pointer := stack.vars[rhs_node.children[0].value]
+        var_offset := stack.top - var_pointer
+        fmt.fprintfln(file, "  mov rax, [rsp+%i] ; value to register", var_offset)
+    }
+    else if rhs_node.children[0].type == .INTEGER_LITERAL
+    {
+        fmt.fprintfln(file, "  mov rax, %s ; assign value", rhs_node.children[0].value)
+    }
+    else
+    {
+        fmt.println("Invalid statement")
+        os.exit(1)
+    }
+
+    if lhs_node.value in stack.vars
+    {
+        fmt.println("Identifier already exists")
+        os.exit(1)
+    }
+
+    fmt.fprintln(file, "  mov [rsp], rax ; assign value")
+    stack.vars[lhs_node.value] = stack.top
+
+    fmt.fprintln(file, "  sub rsp, 8 ; allocate space on stack")
+    stack.top += 8
 }
 
 generate_assignment_statement :: proc(file: os.Handle, node: ast_node, stack: ^stack)
@@ -77,20 +121,15 @@ generate_assignment_statement :: proc(file: os.Handle, node: ast_node, stack: ^s
         os.exit(1)
     }
 
-    if lhs_node.value in stack.vars
+    if !(lhs_node.value in stack.vars)
     {
-        var_pointer := stack.vars[lhs_node.value]
-        var_offset := stack.top - var_pointer
-        fmt.fprintfln(file, "  mov [rsp+%i], rax ; assign value", var_offset)
+        fmt.println("Undeclared identifier")
+        os.exit(1)
     }
-    else
-    {
-        fmt.fprintln(file, "  mov [rsp], rax ; assign value")
-        stack.vars[lhs_node.value] = stack.top
 
-        fmt.fprintln(file, "  sub rsp, 8 ; allocate space on stack")
-        stack.top += 8
-    }
+    var_pointer := stack.vars[lhs_node.value]
+    var_offset := stack.top - var_pointer
+    fmt.fprintfln(file, "  mov [rsp+%i], rax ; assign value", var_offset)
 }
 
 generate_exit_statement :: proc(file: os.Handle, node: ast_node, stack: ^stack)

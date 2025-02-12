@@ -8,6 +8,7 @@ token_type :: enum
 {
   OPENING_BRACKET,
   CLOSING_BRACKET,
+  COLON,
   EQUALS,
   IDENTIFIER,
   INTEGER_LITERAL
@@ -34,6 +35,10 @@ tokenize :: proc(src: string) -> (tokens: [dynamic]token)
     else if src[index] == ')'
     {
       append(&tokens, token { .CLOSING_BRACKET, ")" })
+    }
+    else if src[index] == ':'
+    {
+      append(&tokens, token { .COLON, ":" })
     }
     else if src[index] == '='
     {

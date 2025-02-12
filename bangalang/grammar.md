@@ -1,6 +1,7 @@
 $$
 \begin{align}
   [\text{Program}] &\to [\text{Statement}]^* \\
+  [\text{Scope}] &\to \{[\text{Statement}]^*\} \\
   [\text{Statement}] &\to
   \begin{cases}
     \text{identifier} = [\text{Term}] \\
