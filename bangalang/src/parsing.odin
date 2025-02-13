@@ -18,202 +18,156 @@ ast_node :: struct
 {
     type: ast_node_type,
     value: string,
-    children: [dynamic]ast_node
+    children: [dynamic]ast_node,
+    line_number: int,
+    column_number: int
 }
 
-parse_program :: proc(tokens: [dynamic]token) -> (nodes: [dynamic]ast_node)
+parse_program :: proc(stream: ^token_stream) -> (nodes: [dynamic]ast_node)
 {
-    for index := 0; index < len(tokens);
+    for stream.next_index < len(stream.tokens)
     {
-        node, token_count := parse_statement(tokens, index)
-
-        append(&nodes, node)
-        index += token_count
+        append(&nodes, parse_statement(stream))
     }
 
     return
 }
 
-parse_statement :: proc(tokens: [dynamic]token, start_index: int) -> (node: ast_node, token_count: int)
+parse_statement :: proc(stream: ^token_stream) -> (node: ast_node)
 {
-    #partial switch tokens[start_index].type
+    #partial switch peek_token(stream).type
     {
     case .OPENING_SQUIGGLY_BRACKET:
-        scope_node, scope_token_count := parse_scope(tokens, start_index)
-        node = scope_node
-        token_count = scope_token_count
+        node = parse_scope(stream)
     case .IDENTIFIER:
-        if start_index + 1 >= len(tokens)
-        {
-            fmt.println("Invalid statement, end of file encountered")
-            os.exit(1)
-        }
-
-        #partial switch tokens[start_index + 1].type
+        #partial switch peek_token(stream, 1).type
         {
         case .COLON:
-            declaration_node, declaration_token_count := parse_declaration_statement(tokens, start_index)
-            node = declaration_node
-            token_count = declaration_token_count
+            node = parse_declaration_statement(stream)
         case .EQUALS:
-            assignment_node, assignemnt_token_count := parse_assignment_statement(tokens, start_index)
-            node = assignment_node
-            token_count = assignemnt_token_count
+            node = parse_assignment_statement(stream)
         case .OPENING_BRACKET:
-            exit_node, exit_token_count := parse_exit_statement(tokens, start_index)
-            node = exit_node
-            token_count = exit_token_count
+            node = parse_exit_statement(stream)
         case:
-            fmt.println("Invalid statement")
+            token := peek_token(stream, 1)
+            fmt.println("Failed to parse statement")
+            fmt.printfln("Invalid token '%s' at line %i, column %i", token.value, token.line_number, token.column_number)
             os.exit(1)
         }
     case:
-        fmt.println("Invalid statement")
+        token := peek_token(stream)
+        fmt.println("Failed to parse statement")
+        fmt.printfln("Invalid token '%s' at line %i, column %i", token.value, token.line_number, token.column_number)
         os.exit(1)
     }
 
     return
 }
 
-parse_scope :: proc(tokens: [dynamic]token, start_index: int) -> (node: ast_node, token_count: int)
+parse_scope :: proc(stream: ^token_stream) -> (node: ast_node)
 {
     node.type = .SCOPE
+    node.line_number = peek_token(stream).line_number
+    node.column_number = peek_token(stream).column_number
 
-    // opening squiggly bracket
-    token_count += 1
+    next_token(stream, []token_type { .OPENING_SQUIGGLY_BRACKET })
 
-    for start_index + token_count < len(tokens)
+    for stream.next_index < len(stream.tokens)
     {
-        if tokens[start_index + token_count].type == .CLOSING_SQUIGGLY_BRACKET
+        if peek_token(stream).type == .CLOSING_SQUIGGLY_BRACKET
         {
-            // closing squiggly bracket
-            token_count += 1
-
+            next_token(stream, []token_type { .CLOSING_SQUIGGLY_BRACKET })
             return
         }
 
-        child_node, child_token_count := parse_statement(tokens, start_index + token_count)
-
-        append(&node.children, child_node)
-        token_count += child_token_count
+        append(&node.children, parse_statement(stream))
     }
 
     fmt.println("Scope never ends")
     os.exit(1)
 }
 
-parse_declaration_statement :: proc(tokens: [dynamic]token, start_index: int) -> (node: ast_node, token_count: int)
+parse_declaration_statement :: proc(stream: ^token_stream) -> (node: ast_node)
 {
-    if start_index + 3 >= len(tokens)
-    {
-        fmt.println("Invalid statement, end of file encountered")
-        os.exit(1)
-    }
-
     node.type = .DECLARATION_STATEMENT
+    node.line_number = peek_token(stream).line_number
+    node.column_number = peek_token(stream).column_number
 
-    lhs_node := ast_node { type = .IDENTIFIER, value = tokens[start_index].value }
+    lhs_node := ast_node { type = .IDENTIFIER, value = next_token(stream, []token_type { .IDENTIFIER }).value }
     append(&node.children, lhs_node)
-    token_count += 1
 
-    if tokens[start_index + 1].type != .COLON || tokens[start_index + 2].type != .EQUALS
-    {
-        fmt.println("Invalid statement")
-        os.exit(1)
-    }
+    next_token(stream, []token_type { .COLON })
+    next_token(stream, []token_type { .EQUALS })
 
-    // colon
-    token_count += 1
-
-    // equals
-    token_count += 1
-
-    rhs_node, rhs_token_count := parse_term(tokens, start_index + token_count)
+    rhs_node := parse_term(stream)
     append(&node.children, rhs_node)
-    token_count += rhs_token_count
 
     return
 }
 
-parse_assignment_statement :: proc(tokens: [dynamic]token, start_index: int) -> (node: ast_node, token_count: int)
+parse_assignment_statement :: proc(stream: ^token_stream) -> (node: ast_node)
 {
-    if start_index + 2 >= len(tokens)
-    {
-        fmt.println("Invalid statement, end of file encountered")
-        os.exit(1)
-    }
-
     node.type = .ASSIGNMENT_STATEMENT
+    node.line_number = peek_token(stream).line_number
+    node.column_number = peek_token(stream).column_number
 
-    lhs_node := ast_node { type = .IDENTIFIER, value = tokens[start_index].value }
+    lhs_node := ast_node { type = .IDENTIFIER, value = next_token(stream, []token_type { .IDENTIFIER }).value }
     append(&node.children, lhs_node)
-    token_count += 1
 
-    if tokens[start_index + 1].type != .EQUALS
-    {
-        fmt.println("Invalid statement")
-        os.exit(1)
-    }
+    next_token(stream, []token_type { .EQUALS })
 
-    // equals
-    token_count += 1
-
-    rhs_node, rhs_token_count := parse_term(tokens, start_index + token_count)
+    rhs_node := parse_term(stream)
     append(&node.children, rhs_node)
-    token_count += rhs_token_count
 
     return
 }
 
-parse_exit_statement :: proc(tokens: [dynamic]token, start_index: int) -> (node: ast_node, token_count: int)
+parse_exit_statement :: proc(stream: ^token_stream) -> (node: ast_node)
 {
-    if start_index + 3 >= len(tokens)
-    {
-        fmt.println("Invalid statement, end of file encountered")
-        os.exit(1)
-    }
-
-    if tokens[start_index + 1].type != .OPENING_BRACKET || tokens[start_index + 3].type != .CLOSING_BRACKET
-    {
-        fmt.println("Invalid statement")
-        os.exit(1)
-    }
-
     node.type = .EXIT_STATEMENT
+    node.line_number = peek_token(stream).line_number
+    node.column_number = peek_token(stream).column_number
 
-    // identifier, opening bracket
-    token_count += 2
+    exit_token := next_token(stream, []token_type { .IDENTIFIER })
+    if exit_token.value != "exit"
+    {
+        fmt.println("Failed to parse exit statement")
+        fmt.println("That doesn't say exit!")
+        fmt.printfln("Invalid token '%s' at line %i, column %i", exit_token.value, exit_token.line_number, exit_token.column_number)
+        os.exit(1)
+    }
 
-    param_node, param_token_count := parse_term(tokens, start_index + 2)
+    next_token(stream, []token_type { .OPENING_BRACKET })
+
+    param_node := parse_term(stream)
     append(&node.children, param_node)
-    token_count += param_token_count
 
-    // closing bracket
-    token_count += 1
+    next_token(stream, []token_type { .CLOSING_BRACKET })
 
     return
 }
 
-parse_term :: proc(tokens: [dynamic]token, start_index: int) -> (node: ast_node, token_count: int)
+parse_term :: proc(stream: ^token_stream) -> (node: ast_node)
 {
     node.type = .TERM
+    node.line_number = peek_token(stream).line_number
+    node.column_number = peek_token(stream).column_number
 
-    child_node := ast_node { value = tokens[start_index].value }
+    token := next_token(stream, []token_type { .IDENTIFIER, .INTEGER_LITERAL })
 
-    #partial switch tokens[start_index].type
+    node.value = token.value
+
+    #partial switch token.type
     {
     case .IDENTIFIER:
-        child_node.type = .IDENTIFIER
+        node.type = .IDENTIFIER
     case .INTEGER_LITERAL:
-        child_node.type = .INTEGER_LITERAL
+        node.type = .INTEGER_LITERAL
     case:
-        fmt.println("Invalid term")
+        fmt.println("Failed to parse term")
+        fmt.printfln("Invalid token '%s' at line %i, column %i", token.value, token.line_number, token.column_number)
         os.exit(1)
     }
-
-    append(&node.children, child_node)
-
-    token_count += 1
 
     return
 }

@@ -47,7 +47,8 @@ generate_statement :: proc(file: os.Handle, node: ast_node, stack: ^stack)
     case .EXIT_STATEMENT:
         generate_exit_statement(file, node, stack)
     case:
-        fmt.println("Invalid statement")
+        fmt.println("Failed to generate statement")
+        fmt.printfln("Invalid node at line %i, column %i", node.line_number, node.column_number)
         os.exit(1)
     }
 }
@@ -81,31 +82,34 @@ generate_declaration_statement :: proc(file: os.Handle, node: ast_node, stack: ^
     lhs_node := node.children[0]
     rhs_node := node.children[1]
 
-    if rhs_node.children[0].type == .IDENTIFIER
+    if rhs_node.type == .IDENTIFIER
     {
-        if !(rhs_node.children[0].value in stack.vars)
+        if !(rhs_node.value in stack.vars)
         {
-            fmt.printfln("Undeclared identifier: %s", rhs_node.children[0].value)
+            fmt.println("Failed to generate declaration statement")
+            fmt.printfln("Undeclared identifier '%s' at line %i, column %i", rhs_node.value, rhs_node.line_number, rhs_node.column_number)
             os.exit(1)
         }
 
-        var_pointer := stack.vars[rhs_node.children[0].value]
+        var_pointer := stack.vars[rhs_node.value]
         var_offset := stack.top - var_pointer
         fmt.fprintfln(file, "  mov rax, [rsp+%i] ; value to register", var_offset)
     }
-    else if rhs_node.children[0].type == .INTEGER_LITERAL
+    else if rhs_node.type == .INTEGER_LITERAL
     {
-        fmt.fprintfln(file, "  mov rax, %s ; assign value", rhs_node.children[0].value)
+        fmt.fprintfln(file, "  mov rax, %s ; assign value", rhs_node.value)
     }
     else
     {
-        fmt.println("Invalid statement")
+        fmt.println("Failed to generate declaration statement")
+        fmt.printfln("Invalid node at line %i, column %i", rhs_node.line_number, rhs_node.column_number)
         os.exit(1)
     }
 
     if lhs_node.value in stack.vars
     {
-        fmt.println("Identifier already exists")
+        fmt.println("Failed to generate declaration statement")
+        fmt.printfln("Duplicate identifier '%s' at line %i, column %i", lhs_node.value, lhs_node.line_number, lhs_node.column_number)
         os.exit(1)
     }
 
@@ -123,31 +127,34 @@ generate_assignment_statement :: proc(file: os.Handle, node: ast_node, stack: ^s
     lhs_node := node.children[0]
     rhs_node := node.children[1]
 
-    if rhs_node.children[0].type == .IDENTIFIER
+    if rhs_node.type == .IDENTIFIER
     {
-        if !(rhs_node.children[0].value in stack.vars)
+        if !(rhs_node.value in stack.vars)
         {
-            fmt.printfln("Undeclared identifier: %s", rhs_node.children[0].value)
+            fmt.println("Failed to generate assignment statement")
+            fmt.printfln("Undeclared identifier '%s' at line %i, column %i", rhs_node.value, rhs_node.line_number, rhs_node.column_number)
             os.exit(1)
         }
 
-        var_pointer := stack.vars[rhs_node.children[0].value]
+        var_pointer := stack.vars[rhs_node.value]
         var_offset := stack.top - var_pointer
         fmt.fprintfln(file, "  mov rax, [rsp+%i] ; value to register", var_offset)
     }
-    else if rhs_node.children[0].type == .INTEGER_LITERAL
+    else if rhs_node.type == .INTEGER_LITERAL
     {
-        fmt.fprintfln(file, "  mov rax, %s ; assign value", rhs_node.children[0].value)
+        fmt.fprintfln(file, "  mov rax, %s ; assign value", rhs_node.value)
     }
     else
     {
-        fmt.println("Invalid statement")
+        fmt.println("Failed to generate assignment statement")
+        fmt.printfln("Invalid node at line %i, column %i", rhs_node.line_number, rhs_node.column_number)
         os.exit(1)
     }
 
     if !(lhs_node.value in stack.vars)
     {
-        fmt.println("Undeclared identifier")
+        fmt.println("Failed to generate assignment statement")
+        fmt.printfln("Undeclared identifier '%s' at line %i, column %i", lhs_node.value, lhs_node.line_number, lhs_node.column_number)
         os.exit(1)
     }
 
@@ -163,19 +170,20 @@ generate_exit_statement :: proc(file: os.Handle, node: ast_node, stack: ^stack)
     param_node := node.children[0]
 
     fmt.fprintln(file, "  mov rax, 60 ; syscall: exit")
-    if param_node.children[0].type == .IDENTIFIER
+    if param_node.type == .IDENTIFIER
     {
-        var_pointer := stack.vars[param_node.children[0].value]
+        var_pointer := stack.vars[param_node.value]
         var_offset := stack.top - var_pointer
         fmt.fprintfln(file, "  mov rdi, [rsp+%i] ; arg0: exit_code", var_offset)
     }
-    else if param_node.children[0].type == .INTEGER_LITERAL
+    else if param_node.type == .INTEGER_LITERAL
     {
-        fmt.fprintfln(file, "  mov rdi, %s ; arg0: exit_code", param_node.children[0].value)
+        fmt.fprintfln(file, "  mov rdi, %s ; arg0: exit_code", param_node.value)
     }
     else
     {
-        fmt.println("Invalid statement")
+        fmt.println("Failed to generate exit statement")
+        fmt.printfln("Invalid node at line %i, column %i", param_node.line_number, param_node.column_number)
         os.exit(1)
     }
     fmt.fprintln(file, "  syscall ; call kernel")

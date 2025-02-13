@@ -15,9 +15,8 @@ main :: proc()
   src := string(src_data)
   tokens := tokenize(src)
 
-  ast_nodes := parse_program(tokens)
-  fmt.println("ast_nodes")
-  fmt.println(ast_nodes)
+  stream := token_stream { tokens = tokens[:] }
+  ast_nodes := parse_program(&stream)
 
   generate_program("./bin/out.asm", ast_nodes)
 }
