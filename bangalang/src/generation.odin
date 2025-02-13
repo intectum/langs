@@ -24,9 +24,9 @@ generate_program :: proc(file_name: string, nodes: [dynamic]ast_node)
 
     stack: stack
 
-    for index := 0; index < len(nodes); index += 1
+    for node in nodes
     {
-        generate_statement(file, nodes[index], &stack)
+        generate_statement(file, node, &stack)
     }
 
     fmt.fprintln(file, "  mov rax, 60 ; syscall: exit")
@@ -38,6 +38,8 @@ generate_statement :: proc(file: os.Handle, node: ast_node, stack: ^stack)
 {
     #partial switch node.type
     {
+    case .SCOPE:
+        generate_scope(file, node, stack)
     case .DECLARATION_STATEMENT:
         generate_declaration_statement(file, node, stack)
     case .ASSIGNMENT_STATEMENT:
@@ -48,6 +50,28 @@ generate_statement :: proc(file: os.Handle, node: ast_node, stack: ^stack)
         fmt.println("Invalid statement")
         os.exit(1)
     }
+}
+
+generate_scope :: proc(file: os.Handle, node: ast_node, parent_stack: ^stack)
+{
+    fmt.fprintln(file, "  ; scope start")
+
+    scope_stack: stack
+    scope_stack.top = parent_stack.top
+    for key in parent_stack.vars
+    {
+        scope_stack.vars[key] = parent_stack.vars[key]
+    }
+
+    for child_node in node.children
+    {
+        generate_statement(file, child_node, &scope_stack)
+    }
+
+    scope_stack_size := scope_stack.top - parent_stack.top
+
+    fmt.fprintfln(file, "  add rsp, %i ; clear scope's stack", scope_stack_size)
+    fmt.fprintln(file, "  ; scope end")
 }
 
 generate_declaration_statement :: proc(file: os.Handle, node: ast_node, stack: ^stack)

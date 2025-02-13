@@ -8,6 +8,8 @@ token_type :: enum
 {
   OPENING_BRACKET,
   CLOSING_BRACKET,
+  OPENING_SQUIGGLY_BRACKET,
+  CLOSING_SQUIGGLY_BRACKET,
   COLON,
   EQUALS,
   IDENTIFIER,
@@ -35,6 +37,14 @@ tokenize :: proc(src: string) -> (tokens: [dynamic]token)
     else if src[index] == ')'
     {
       append(&tokens, token { .CLOSING_BRACKET, ")" })
+    }
+    else if src[index] == '{'
+    {
+      append(&tokens, token { .OPENING_SQUIGGLY_BRACKET, "{" })
+    }
+    else if src[index] == '}'
+    {
+      append(&tokens, token { .CLOSING_SQUIGGLY_BRACKET, "}" })
     }
     else if src[index] == ':'
     {

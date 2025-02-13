@@ -5,6 +5,7 @@ import "core:os"
 
 ast_node_type :: enum
 {
+    SCOPE,
     DECLARATION_STATEMENT,
     ASSIGNMENT_STATEMENT,
     EXIT_STATEMENT,
@@ -37,6 +38,10 @@ parse_statement :: proc(tokens: [dynamic]token, start_index: int) -> (node: ast_
 {
     #partial switch tokens[start_index].type
     {
+    case .OPENING_SQUIGGLY_BRACKET:
+        scope_node, scope_token_count := parse_scope(tokens, start_index)
+        node = scope_node
+        token_count = scope_token_count
     case .IDENTIFIER:
         if start_index + 1 >= len(tokens)
         {
@@ -68,6 +73,33 @@ parse_statement :: proc(tokens: [dynamic]token, start_index: int) -> (node: ast_
     }
 
     return
+}
+
+parse_scope :: proc(tokens: [dynamic]token, start_index: int) -> (node: ast_node, token_count: int)
+{
+    node.type = .SCOPE
+
+    // opening squiggly bracket
+    token_count += 1
+
+    for start_index + token_count < len(tokens)
+    {
+        if tokens[start_index + token_count].type == .CLOSING_SQUIGGLY_BRACKET
+        {
+            // closing squiggly bracket
+            token_count += 1
+
+            return
+        }
+
+        child_node, child_token_count := parse_statement(tokens, start_index + token_count)
+
+        append(&node.children, child_node)
+        token_count += child_token_count
+    }
+
+    fmt.println("Scope never ends")
+    os.exit(1)
 }
 
 parse_declaration_statement :: proc(tokens: [dynamic]token, start_index: int) -> (node: ast_node, token_count: int)
