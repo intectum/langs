@@ -9,7 +9,10 @@ ast_node_type :: enum
     DECLARATION_STATEMENT,
     ASSIGNMENT_STATEMENT,
     EXIT_STATEMENT,
-    TERM,
+    ADD,
+    SUBTRACT,
+    MULTIPLY,
+    DIVIDE,
     IDENTIFIER,
     INTEGER_LITERAL
 }
@@ -99,7 +102,7 @@ parse_declaration_statement :: proc(stream: ^token_stream) -> (node: ast_node)
     next_token(stream, []token_type { .COLON })
     next_token(stream, []token_type { .EQUALS })
 
-    rhs_node := parse_term(stream)
+    rhs_node := parse_expression(stream)
     append(&node.children, rhs_node)
 
     return
@@ -116,7 +119,7 @@ parse_assignment_statement :: proc(stream: ^token_stream) -> (node: ast_node)
 
     next_token(stream, []token_type { .EQUALS })
 
-    rhs_node := parse_term(stream)
+    rhs_node := parse_expression(stream)
     append(&node.children, rhs_node)
 
     return
@@ -139,7 +142,7 @@ parse_exit_statement :: proc(stream: ^token_stream) -> (node: ast_node)
 
     next_token(stream, []token_type { .OPENING_BRACKET })
 
-    param_node := parse_term(stream)
+    param_node := parse_expression(stream)
     append(&node.children, param_node)
 
     next_token(stream, []token_type { .CLOSING_BRACKET })
@@ -147,9 +150,55 @@ parse_exit_statement :: proc(stream: ^token_stream) -> (node: ast_node)
     return
 }
 
+parse_expression :: proc(stream: ^token_stream) -> (node: ast_node)
+{
+    node.line_number = peek_token(stream).line_number
+    node.column_number = peek_token(stream).column_number
+
+    lhs_node := parse_term(stream)
+    append(&node.children, lhs_node)
+
+    operator_token := peek_token(stream)
+
+    operator_found := false
+    operator_token_types := []token_type { .PLUS, .MINUS, .ASTERISK, .BACKSLASH };
+    for operator_token_type in operator_token_types
+    {
+        if operator_token_type == operator_token.type
+        {
+            operator_found = true
+            break
+        }
+    }
+
+    if !operator_found
+    {
+        node = lhs_node
+        return
+    }
+
+    next_token(stream, operator_token_types)
+
+    #partial switch operator_token.type
+    {
+    case .PLUS:
+        node.type = .ADD
+    case .MINUS:
+        node.type = .SUBTRACT
+    case .ASTERISK:
+        node.type = .MULTIPLY
+    case .BACKSLASH:
+        node.type = .DIVIDE
+    }
+
+    rhs_node := parse_term(stream)
+    append(&node.children, rhs_node)
+
+    return
+}
+
 parse_term :: proc(stream: ^token_stream) -> (node: ast_node)
 {
-    node.type = .TERM
     node.line_number = peek_token(stream).line_number
     node.column_number = peek_token(stream).column_number
 

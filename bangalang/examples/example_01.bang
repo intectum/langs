@@ -9,4 +9,6 @@ y = 34
 
 z := y
 
-exit(z)
+result := y / 7
+
+exit(x / 2)

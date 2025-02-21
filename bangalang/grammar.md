@@ -4,10 +4,19 @@ $$
   [\text{Statement}] &\to
   \begin{cases}
     [\text{Scope}] \\
-    \text{identifier} = [\text{Term}] \\
-    \text{exit}([\text{Term}]) \\
+    \text{identifier} := [\text{Expression}] \\
+    \text{identifier} = [\text{Expression}] \\
+    \text{exit}([\text{Expression}]) \\
   \end{cases} \\
   [\text{Scope}] &\to \{[\text{Statement}]^*\} \\
+  [\text{Expression}] &\to
+  \begin{cases}
+    [\text{Term}] \\
+    [\text{Term}] + [\text{Term}] \\
+    [\text{Term}] - [\text{Term}] \\
+    [\text{Term}] * [\text{Term}] \\
+    [\text{Term}] / [\text{Term}] \\
+  \end{cases} \\
   [\text{Term}] &\to
   \begin{cases}
     \text{identifier} \\

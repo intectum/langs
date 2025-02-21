@@ -12,6 +12,10 @@ token_type :: enum
   CLOSING_SQUIGGLY_BRACKET,
   COLON,
   EQUALS,
+  PLUS,
+  MINUS,
+  ASTERISK,
+  BACKSLASH,
   IDENTIFIER,
   INTEGER_LITERAL
 }
@@ -141,6 +145,34 @@ tokenize :: proc(src: string) -> (tokens: [dynamic]token)
     else if src[index] == '='
     {
       append(&tokens, token { .EQUALS, "=", line_number, column_number })
+
+      index += 1
+      column_number += 1
+    }
+    else if src[index] == '+'
+    {
+      append(&tokens, token { .PLUS, "+", line_number, column_number })
+
+      index += 1
+      column_number += 1
+    }
+    else if src[index] == '-'
+    {
+      append(&tokens, token { .MINUS, "-", line_number, column_number })
+
+      index += 1
+      column_number += 1
+    }
+    else if src[index] == '*'
+    {
+      append(&tokens, token { .ASTERISK, "*", line_number, column_number })
+
+      index += 1
+      column_number += 1
+    }
+    else if src[index] == '/'
+    {
+      append(&tokens, token { .BACKSLASH, "/", line_number, column_number })
 
       index += 1
       column_number += 1
