@@ -11,13 +11,13 @@ $$
   [\text{Scope}] &\to \{[\text{Statement}]^*\} \\
   [\text{Expression}] &\to
   \begin{cases}
-    [\text{Term}] \\
-    [\text{Term}] + [\text{Term}] \\
-    [\text{Term}] - [\text{Term}] \\
-    [\text{Term}] * [\text{Term}] \\
-    [\text{Term}] / [\text{Term}] \\
+    [\text{Primary}] \\
+    [\text{Primary}] + [\text{Expression}] \\
+    [\text{Primary}] - [\text{Expression}] \\
+    [\text{Primary}] * [\text{Expression}] \\
+    [\text{Primary}] / [\text{Expression}] \\
   \end{cases} \\
-  [\text{Term}] &\to
+  [\text{Primary}] &\to
   \begin{cases}
     \text{identifier} \\
     \text{integer literal} \\

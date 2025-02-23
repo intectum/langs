@@ -31,6 +31,7 @@ generate_program :: proc(file_name: string, nodes: [dynamic]ast_node)
         generate_statement(file, node, &stack)
     }
 
+    fmt.fprintln(file, "  ; default exit")
     fmt.fprintln(file, "  mov rax, 60 ; syscall: exit")
     fmt.fprintln(file, "  mov rdi, 0 ; arg0: exit_code")
     fmt.fprintln(file, "  syscall ; call kernel")
@@ -73,6 +74,7 @@ generate_scope :: proc(file: os.Handle, node: ast_node, parent_stack: ^stack)
 
     scope_stack_size := scope_stack.top - parent_stack.top
 
+    fmt.fprintln(file, "  ; close scope")
     fmt.fprintfln(file, "  add rsp, %i ; clear scope's stack", scope_stack_size)
     fmt.fprintln(file, "; scope end")
 }
@@ -91,7 +93,8 @@ generate_declaration_statement :: proc(file: os.Handle, node: ast_node, stack: ^
         os.exit(1)
     }
 
-    fmt.fprintfln(file, "  mov [rsp], %s ; assign value", generate_expression(file, rhs_node, stack))
+    generate_expression(file, rhs_node, stack)
+    fmt.fprintln(file, "  mov [rsp], r8 ; assign value")
     stack.vars[lhs_node.value] = stack.top
 
     fmt.fprintln(file, "  sub rsp, 8 ; allocate space on stack")
@@ -114,7 +117,8 @@ generate_assignment_statement :: proc(file: os.Handle, node: ast_node, stack: ^s
 
     var_pointer := stack.vars[lhs_node.value]
     var_offset := stack.top - var_pointer
-    fmt.fprintfln(file, "  mov [rsp+%i], %s ; assign value", var_offset, generate_expression(file, rhs_node, stack))
+    generate_expression(file, rhs_node, stack)
+    fmt.fprintfln(file, "  mov [rsp+%i], r8 ; assign value", var_offset)
 }
 
 generate_exit_statement :: proc(file: os.Handle, node: ast_node, stack: ^stack)
@@ -123,46 +127,54 @@ generate_exit_statement :: proc(file: os.Handle, node: ast_node, stack: ^stack)
 
     param_node := node.children[0]
 
-    fmt.fprintfln(file, "  mov rdi, %s ; arg0: exit_code", generate_expression(file, param_node, stack))
+    generate_expression(file, param_node, stack)
     fmt.fprintln(file, "  mov rax, 60 ; syscall: exit")
+    fmt.fprintln(file, "  mov rdi, r8 ; arg0: exit_code")
     fmt.fprintln(file, "  syscall ; call kernel")
 }
 
-generate_expression :: proc(file: os.Handle, node: ast_node, stack: ^stack) -> string
+generate_expression :: proc(file: os.Handle, node: ast_node, stack: ^stack, register_num: int = 8)
 {
     if len(node.children) == 0
     {
-        fmt.fprintfln(file, "  mov rax, %s ; assign term to rax", generate_term(node, stack))
-        return "rax"
+        generate_primary(file, node, stack, register_num)
+        return
     }
 
     lhs_node := node.children[0]
     rhs_node := node.children[1]
 
-    fmt.fprintfln(file, "  mov rax, %s ; assign lhs to rax", generate_term(lhs_node, stack))
+    lhs_register_num := register_num / 2 * 2 + 2
+    rhs_register_num := lhs_register_num + 1
+
+    generate_expression(file, lhs_node, stack, lhs_register_num)
+    generate_expression(file, rhs_node, stack, rhs_register_num)
 
     #partial switch node.type
     {
     case .ADD:
-        fmt.fprintfln(file, "  add rax, %s ; add rhs to rax", generate_term(rhs_node, stack))
+        fmt.fprintfln(file, "  mov r%i, r%i ; add: assign lhs", register_num, lhs_register_num)
+        fmt.fprintfln(file, "  add r%i, r%i ; add: do it!", register_num, rhs_register_num)
     case .SUBTRACT:
-        fmt.fprintfln(file, "  sub rax, %s ; subtract rhs from rax", generate_term(rhs_node, stack))
+        fmt.fprintfln(file, "  mov r%i, r%i ; subtract: assign lhs", register_num, lhs_register_num)
+        fmt.fprintfln(file, "  sub r%i, r%i ; subtract: do it!", register_num, rhs_register_num)
     case .MULTIPLY:
-        fmt.fprintfln(file, "  imul rax, %s ; multiply rhs by rax", generate_term(rhs_node, stack))
+        fmt.fprintfln(file, "  mov r%i, r%i ; multiply: assign lhs", register_num, lhs_register_num)
+        fmt.fprintfln(file, "  imul r%i, r%i ; multiply: do it!", register_num, rhs_register_num)
     case .DIVIDE:
-        fmt.fprintln(file, "  mov rdx, 0 ; zero out rdx")
-        fmt.fprintfln(file, "  mov rbx, %s ; assign rhs to rbx", generate_term(rhs_node, stack))
-        fmt.fprintln(file, "  idiv rbx ; divide by rhs")
+        // dividend / divisor
+        fmt.fprintln(file, "  mov rdx, 0 ; divide: assign zero to dividend high part")
+        fmt.fprintfln(file, "  mov rax, r%i ; divide: assign lhs to dividend low part", lhs_register_num)
+        fmt.fprintfln(file, "  idiv r%i ; divide: do it!", rhs_register_num)
+        fmt.fprintfln(file, "  mov r%i, rax ; divide: assign result", register_num)
     case:
         fmt.println("Failed to generate expression")
         fmt.printfln("Invalid node at line %i, column %i", node.line_number, node.column_number)
         os.exit(1)
     }
-
-    return "rax"
 }
 
-generate_term :: proc(node: ast_node, stack: ^stack) -> string
+generate_primary :: proc(file: os.Handle, node: ast_node, stack: ^stack, register_num: int)
 {
     if node.type == .IDENTIFIER
     {
@@ -178,14 +190,16 @@ generate_term :: proc(node: ast_node, stack: ^stack) -> string
 
         buf: [256]byte
 
-        return strings.concatenate({ "[rsp+", strconv.itoa(buf[:], var_offset), "]" })
+        fmt.fprintfln(file, "  mov r%i, [rsp+%i] ; assign primary", register_num, var_offset)
     }
     else if node.type == .INTEGER_LITERAL
     {
-        return node.value
+        fmt.fprintfln(file, "  mov r%i, %s ; assign primary", register_num, node.value)
     }
-
-    fmt.println("Failed to generate term")
-    fmt.printfln("Invalid node at line %i, column %i", node.line_number, node.column_number)
-    os.exit(1)
+    else
+    {
+        fmt.println("Failed to generate primary")
+        fmt.printfln("Invalid node at line %i, column %i", node.line_number, node.column_number)
+        os.exit(1)
+    }
 }

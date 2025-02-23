@@ -150,54 +150,43 @@ parse_exit_statement :: proc(stream: ^token_stream) -> (node: ast_node)
     return
 }
 
+// Based on https://en.wikipedia.org/wiki/Operator-precedence_parser#Pseudocode
 parse_expression :: proc(stream: ^token_stream) -> (node: ast_node)
 {
-    node.line_number = peek_token(stream).line_number
-    node.column_number = peek_token(stream).column_number
+    return parse_expression_1(stream, parse_primary(stream), 0)
+}
 
-    lhs_node := parse_term(stream)
-    append(&node.children, lhs_node)
+parse_expression_1 :: proc(stream: ^token_stream, lhs: ast_node, min_precedence: int) -> (final_lhs: ast_node)
+{
+    final_lhs = lhs
 
-    operator_token := peek_token(stream)
-
-    operator_found := false
-    operator_token_types := []token_type { .PLUS, .MINUS, .ASTERISK, .BACKSLASH };
-    for operator_token_type in operator_token_types
+    lookahead := peek_token(stream)
+    for is_binary_operator(lookahead) && binary_operator_precedence(lookahead) >= min_precedence
     {
-        if operator_token_type == operator_token.type
+        op := lookahead
+        next_token(stream)
+        rhs := parse_primary(stream)
+        lookahead = peek_token(stream)
+        for is_binary_operator(lookahead) && binary_operator_precedence(lookahead) > binary_operator_precedence(op)
         {
-            operator_found = true
-            break
+            // NOTE: Need to re-check pseudo code for min_precedence if adding support for right-associative operators
+            rhs = parse_expression_1(stream, rhs, binary_operator_precedence(op) + 1)
+            lookahead = peek_token(stream)
         }
+
+        new_lhs := ast_node { type = to_ast_node_type(op) }
+        new_lhs.line_number = op.line_number
+        new_lhs.column_number = op.column_number
+
+        append(&new_lhs.children, final_lhs)
+        append(&new_lhs.children, rhs)
+        final_lhs = new_lhs
     }
-
-    if !operator_found
-    {
-        node = lhs_node
-        return
-    }
-
-    next_token(stream, operator_token_types)
-
-    #partial switch operator_token.type
-    {
-    case .PLUS:
-        node.type = .ADD
-    case .MINUS:
-        node.type = .SUBTRACT
-    case .ASTERISK:
-        node.type = .MULTIPLY
-    case .BACKSLASH:
-        node.type = .DIVIDE
-    }
-
-    rhs_node := parse_term(stream)
-    append(&node.children, rhs_node)
 
     return
 }
 
-parse_term :: proc(stream: ^token_stream) -> (node: ast_node)
+parse_primary :: proc(stream: ^token_stream) -> (node: ast_node)
 {
     node.line_number = peek_token(stream).line_number
     node.column_number = peek_token(stream).column_number
@@ -213,10 +202,65 @@ parse_term :: proc(stream: ^token_stream) -> (node: ast_node)
     case .INTEGER_LITERAL:
         node.type = .INTEGER_LITERAL
     case:
-        fmt.println("Failed to parse term")
+        fmt.println("Failed to parse primary")
         fmt.printfln("Invalid token '%s' at line %i, column %i", token.value, token.line_number, token.column_number)
         os.exit(1)
     }
 
     return
+}
+
+is_binary_operator :: proc(token: token) -> bool
+{
+    #partial switch token.type
+    {
+    case .PLUS:
+        return true
+    case .MINUS:
+        return true
+    case .ASTERISK:
+        return true
+    case .BACKSLASH:
+        return true
+    case:
+        return false
+    }
+}
+
+binary_operator_precedence :: proc(token: token) -> int
+{
+    #partial switch token.type
+    {
+    case .PLUS:
+        return 1
+    case .MINUS:
+        return 1
+    case .ASTERISK:
+        return 2
+    case .BACKSLASH:
+        return 2
+    case:
+        fmt.println("Failed to determine binary operator precedence")
+        fmt.printfln("Invalid token '%s' at line %i, column %i", token.value, token.line_number, token.column_number)
+        os.exit(1)
+    }
+}
+
+to_ast_node_type :: proc(token: token) -> ast_node_type
+{
+    #partial switch token.type
+    {
+    case .PLUS:
+        return .ADD
+    case .MINUS:
+        return .SUBTRACT
+    case .ASTERISK:
+        return .MULTIPLY
+    case .BACKSLASH:
+        return .DIVIDE
+    case:
+        fmt.println("Failed to find ast node type")
+        fmt.printfln("Invalid token '%s' at line %i, column %i", token.value, token.line_number, token.column_number)
+        os.exit(1)
+    }
 }
