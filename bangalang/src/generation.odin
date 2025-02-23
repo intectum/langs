@@ -43,12 +43,12 @@ generate_statement :: proc(file: os.Handle, node: ast_node, stack: ^stack)
     {
     case .SCOPE:
         generate_scope(file, node, stack)
-    case .DECLARATION_STATEMENT:
-        generate_declaration_statement(file, node, stack)
-    case .ASSIGNMENT_STATEMENT:
-        generate_assignment_statement(file, node, stack)
-    case .EXIT_STATEMENT:
-        generate_exit_statement(file, node, stack)
+    case .DECLARATION:
+        generate_declaration(file, node, stack)
+    case .ASSIGNMENT:
+        generate_assignment(file, node, stack)
+    case .EXIT:
+        generate_exit(file, node, stack)
     case:
         fmt.println("Failed to generate statement")
         fmt.printfln("Invalid node at line %i, column %i", node.line_number, node.column_number)
@@ -79,7 +79,7 @@ generate_scope :: proc(file: os.Handle, node: ast_node, parent_stack: ^stack)
     fmt.fprintln(file, "; scope end")
 }
 
-generate_declaration_statement :: proc(file: os.Handle, node: ast_node, stack: ^stack)
+generate_declaration :: proc(file: os.Handle, node: ast_node, stack: ^stack)
 {
     fmt.fprintln(file, "  ; declare")
 
@@ -88,7 +88,7 @@ generate_declaration_statement :: proc(file: os.Handle, node: ast_node, stack: ^
 
     if lhs_node.value in stack.vars
     {
-        fmt.println("Failed to generate declaration statement")
+        fmt.println("Failed to generate declaration")
         fmt.printfln("Duplicate identifier '%s' at line %i, column %i", lhs_node.value, lhs_node.line_number, lhs_node.column_number)
         os.exit(1)
     }
@@ -101,7 +101,7 @@ generate_declaration_statement :: proc(file: os.Handle, node: ast_node, stack: ^
     stack.top += 8
 }
 
-generate_assignment_statement :: proc(file: os.Handle, node: ast_node, stack: ^stack)
+generate_assignment :: proc(file: os.Handle, node: ast_node, stack: ^stack)
 {
     fmt.fprintln(file, "  ; assign")
 
@@ -110,7 +110,7 @@ generate_assignment_statement :: proc(file: os.Handle, node: ast_node, stack: ^s
 
     if !(lhs_node.value in stack.vars)
     {
-        fmt.println("Failed to generate assignment statement")
+        fmt.println("Failed to generate assignment")
         fmt.printfln("Undeclared identifier '%s' at line %i, column %i", lhs_node.value, lhs_node.line_number, lhs_node.column_number)
         os.exit(1)
     }
@@ -121,7 +121,7 @@ generate_assignment_statement :: proc(file: os.Handle, node: ast_node, stack: ^s
     fmt.fprintfln(file, "  mov [rsp+%i], r8 ; assign value", var_offset)
 }
 
-generate_exit_statement :: proc(file: os.Handle, node: ast_node, stack: ^stack)
+generate_exit :: proc(file: os.Handle, node: ast_node, stack: ^stack)
 {
     fmt.fprintln(file, "  ; exit")
 
@@ -135,7 +135,7 @@ generate_exit_statement :: proc(file: os.Handle, node: ast_node, stack: ^stack)
 
 generate_expression :: proc(file: os.Handle, node: ast_node, stack: ^stack, register_num: int = 8)
 {
-    if len(node.children) == 0
+    if len(node.children) < 2
     {
         generate_primary(file, node, stack, register_num)
         return
@@ -196,10 +196,13 @@ generate_primary :: proc(file: os.Handle, node: ast_node, stack: ^stack, registe
     {
         fmt.fprintfln(file, "  mov r%i, %s ; assign primary", register_num, node.value)
     }
+    else if node.type == .NEGATE
+    {
+        generate_primary(file, node.children[0], stack, register_num)
+        fmt.fprintfln(file, "  neg r%i ; negate", register_num)
+    }
     else
     {
-        fmt.println("Failed to generate primary")
-        fmt.printfln("Invalid node at line %i, column %i", node.line_number, node.column_number)
-        os.exit(1)
+        generate_expression(file, node, stack, register_num)
     }
 }

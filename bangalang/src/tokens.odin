@@ -192,7 +192,7 @@ tokenize :: proc(src: string) -> (tokens: [dynamic]token)
       index = end_index
       column_number += end_index - start_index
     }
-    else if (src[index] >= '0' && src[index] <= '9') || src[index] == '-'
+    else if (src[index] >= '0' && src[index] <= '9')
     {
       start_index := index
       end_index := index + 1
@@ -200,12 +200,6 @@ tokenize :: proc(src: string) -> (tokens: [dynamic]token)
       for src[end_index] >= '0' && src[end_index] <= '9'
       {
         end_index += 1
-      }
-
-      if src[start_index] == '-' && end_index == start_index + 1
-      {
-        fmt.printfln("Negative what tho? at line %i, column %i", line_number, column_number)
-        os.exit(1)
       }
 
       append(&tokens, token { .INTEGER_LITERAL, src[start_index:end_index], line_number, column_number })

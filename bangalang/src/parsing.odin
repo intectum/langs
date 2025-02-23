@@ -6,13 +6,14 @@ import "core:os"
 ast_node_type :: enum
 {
     SCOPE,
-    DECLARATION_STATEMENT,
-    ASSIGNMENT_STATEMENT,
-    EXIT_STATEMENT,
+    DECLARATION,
+    ASSIGNMENT,
+    EXIT,
     ADD,
     SUBTRACT,
     MULTIPLY,
     DIVIDE,
+    NEGATE,
     IDENTIFIER,
     INTEGER_LITERAL
 }
@@ -46,11 +47,11 @@ parse_statement :: proc(stream: ^token_stream) -> (node: ast_node)
         #partial switch peek_token(stream, 1).type
         {
         case .COLON:
-            node = parse_declaration_statement(stream)
+            node = parse_declaration(stream)
         case .EQUALS:
-            node = parse_assignment_statement(stream)
+            node = parse_assignment(stream)
         case .OPENING_BRACKET:
-            node = parse_exit_statement(stream)
+            node = parse_exit(stream)
         case:
             token := peek_token(stream, 1)
             fmt.println("Failed to parse statement")
@@ -90,9 +91,9 @@ parse_scope :: proc(stream: ^token_stream) -> (node: ast_node)
     os.exit(1)
 }
 
-parse_declaration_statement :: proc(stream: ^token_stream) -> (node: ast_node)
+parse_declaration :: proc(stream: ^token_stream) -> (node: ast_node)
 {
-    node.type = .DECLARATION_STATEMENT
+    node.type = .DECLARATION
     node.line_number = peek_token(stream).line_number
     node.column_number = peek_token(stream).column_number
 
@@ -108,9 +109,9 @@ parse_declaration_statement :: proc(stream: ^token_stream) -> (node: ast_node)
     return
 }
 
-parse_assignment_statement :: proc(stream: ^token_stream) -> (node: ast_node)
+parse_assignment :: proc(stream: ^token_stream) -> (node: ast_node)
 {
-    node.type = .ASSIGNMENT_STATEMENT
+    node.type = .ASSIGNMENT
     node.line_number = peek_token(stream).line_number
     node.column_number = peek_token(stream).column_number
 
@@ -125,16 +126,16 @@ parse_assignment_statement :: proc(stream: ^token_stream) -> (node: ast_node)
     return
 }
 
-parse_exit_statement :: proc(stream: ^token_stream) -> (node: ast_node)
+parse_exit :: proc(stream: ^token_stream) -> (node: ast_node)
 {
-    node.type = .EXIT_STATEMENT
+    node.type = .EXIT
     node.line_number = peek_token(stream).line_number
     node.column_number = peek_token(stream).column_number
 
     exit_token := next_token(stream, []token_type { .IDENTIFIER })
     if exit_token.value != "exit"
     {
-        fmt.println("Failed to parse exit statement")
+        fmt.println("Failed to parse exit")
         fmt.println("That doesn't say exit!")
         fmt.printfln("Invalid token '%s' at line %i, column %i", exit_token.value, exit_token.line_number, exit_token.column_number)
         os.exit(1)
@@ -188,6 +189,29 @@ parse_expression_1 :: proc(stream: ^token_stream, lhs: ast_node, min_precedence:
 
 parse_primary :: proc(stream: ^token_stream) -> (node: ast_node)
 {
+    if peek_token(stream).type == .OPENING_BRACKET
+    {
+        next_token(stream, []token_type { .OPENING_BRACKET })
+
+        node = parse_expression(stream)
+
+        next_token(stream, []token_type { .CLOSING_BRACKET })
+
+        return
+    }
+
+    if peek_token(stream).type == .MINUS
+    {
+        next_token(stream, []token_type { .MINUS })
+
+        node.type = .NEGATE
+
+        primary_node := parse_primary(stream)
+        append(&node.children, primary_node)
+
+        return
+    }
+
     node.line_number = peek_token(stream).line_number
     node.column_number = peek_token(stream).column_number
 

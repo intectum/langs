@@ -9,6 +9,6 @@ y = 34
 
 z := y
 
-result := y / 7 + 3 * 3
+result := -((7 + 3) * 2) + 40
 
-exit(result)
+exit(z)

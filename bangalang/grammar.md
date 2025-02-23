@@ -1,26 +1,12 @@
 $$
 \begin{align}
-  [\text{Program}] &\to [\text{Statement}]^* \\
-  [\text{Statement}] &\to
-  \begin{cases}
-    [\text{Scope}] \\
-    \text{identifier} := [\text{Expression}] \\
-    \text{identifier} = [\text{Expression}] \\
-    \text{exit}([\text{Expression}]) \\
-  \end{cases} \\
-  [\text{Scope}] &\to \{[\text{Statement}]^*\} \\
-  [\text{Expression}] &\to
-  \begin{cases}
-    [\text{Primary}] \\
-    [\text{Primary}] + [\text{Expression}] \\
-    [\text{Primary}] - [\text{Expression}] \\
-    [\text{Primary}] * [\text{Expression}] \\
-    [\text{Primary}] / [\text{Expression}] \\
-  \end{cases} \\
-  [\text{Primary}] &\to
-  \begin{cases}
-    \text{identifier} \\
-    \text{integer literal} \\
-  \end{cases}
+program\ &\to\ statement^*\\
+statement\ &\to\ scope\ |\ declaration\ |\ assignment\ |\ exit \\
+scope\ &\to\ \text{"\{"}\ statement^*\ \text{"\}"}\\
+declaration\ &\to\ identifier\ \text{":"}\ \text{"="}\ expression\\
+assignment\ &\to\ identifier\ \text{"="}\ expression\\
+exit\ &\to\ \text{"exit("}\ expression\ \text{")"}\\
+expression\ &\to\ primary\ (\ (\ \text{"+"}\ |\ \text{"-"}\ |\ \text{"*"}\ |\ \text{"/"}\ )\ primary\ )^*\\
+primary\ &\to\ \text{"("}\ expression\ \text{")"}\ |\ identifier\ |\ integer\_literal\ |\ \text{"-"}\ primary\\
 \end{align}
 $$
