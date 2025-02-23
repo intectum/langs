@@ -94,10 +94,8 @@ generate_declaration :: proc(file: os.Handle, node: ast_node, stack: ^stack)
     }
 
     generate_expression(file, rhs_node, stack)
-    fmt.fprintln(file, "  mov [rsp], r8 ; assign value")
+    fmt.fprintln(file, "  push r8 ; push to stack")
     stack.vars[lhs_node.value] = stack.top
-
-    fmt.fprintln(file, "  sub rsp, 8 ; allocate space on stack")
     stack.top += 8
 }
 
@@ -187,9 +185,6 @@ generate_primary :: proc(file: os.Handle, node: ast_node, stack: ^stack, registe
 
         var_pointer := stack.vars[node.value]
         var_offset := stack.top - var_pointer
-
-        buf: [256]byte
-
         fmt.fprintfln(file, "  mov r%i, [rsp+%i] ; assign primary", register_num, var_offset)
     }
     else if node.type == .INTEGER_LITERAL

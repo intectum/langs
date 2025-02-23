@@ -11,4 +11,4 @@ z := y
 
 result := -((7 + 3) * 2) + 40
 
-exit(z)
+exit(result)
