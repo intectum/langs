@@ -11,4 +11,21 @@ z := y
 
 result := -((7 + 3) * 2) + 40
 
+result = 0
+
+if result
+{
+    result = 2
+}
+
+if z - 77
+{
+    result = 5
+    result = 3 * result
+}
+else
+{
+    result = 9
+}
+
 exit(result)

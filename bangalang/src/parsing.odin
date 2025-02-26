@@ -5,6 +5,7 @@ import "core:os"
 
 ast_node_type :: enum
 {
+    IF,
     SCOPE,
     DECLARATION,
     ASSIGNMENT,
@@ -41,8 +42,6 @@ parse_statement :: proc(stream: ^token_stream) -> (node: ast_node)
 {
     #partial switch peek_token(stream).type
     {
-    case .OPENING_SQUIGGLY_BRACKET:
-        node = parse_scope(stream)
     case .IDENTIFIER:
         #partial switch peek_token(stream, 1).type
         {
@@ -58,11 +57,40 @@ parse_statement :: proc(stream: ^token_stream) -> (node: ast_node)
             fmt.printfln("Invalid token '%s' at line %i, column %i", token.value, token.line_number, token.column_number)
             os.exit(1)
         }
+    case .KEYWORD:
+        node = parse_if(stream)
+    case .OPENING_SQUIGGLY_BRACKET:
+        node = parse_scope(stream)
     case:
         token := peek_token(stream)
         fmt.println("Failed to parse statement")
         fmt.printfln("Invalid token '%s' at line %i, column %i", token.value, token.line_number, token.column_number)
         os.exit(1)
+    }
+
+    return
+}
+
+parse_if :: proc(stream: ^token_stream) -> (node: ast_node)
+{
+    node.type = .IF
+    node.line_number = peek_token(stream).line_number
+    node.column_number = peek_token(stream).column_number
+
+    next_token(stream, token_type.KEYWORD, "if")
+
+    expression_node := parse_expression(stream)
+    append(&node.children, expression_node)
+
+    scope_node := parse_scope(stream)
+    append(&node.children, scope_node)
+
+    if peek_token(stream).value == "else"
+    {
+        next_token(stream, token_type.KEYWORD, "else")
+
+        else_scope_node := parse_scope(stream)
+        append(&node.children, else_scope_node)
     }
 
     return
@@ -97,7 +125,8 @@ parse_declaration :: proc(stream: ^token_stream) -> (node: ast_node)
     node.line_number = peek_token(stream).line_number
     node.column_number = peek_token(stream).column_number
 
-    lhs_node := ast_node { type = .IDENTIFIER, value = next_token(stream, []token_type { .IDENTIFIER }).value }
+    lhs_token := next_token(stream, []token_type { .IDENTIFIER })
+    lhs_node := ast_node { .IDENTIFIER, lhs_token.value, {}, lhs_token.line_number, lhs_token.column_number }
     append(&node.children, lhs_node)
 
     next_token(stream, []token_type { .COLON })
@@ -115,7 +144,8 @@ parse_assignment :: proc(stream: ^token_stream) -> (node: ast_node)
     node.line_number = peek_token(stream).line_number
     node.column_number = peek_token(stream).column_number
 
-    lhs_node := ast_node { type = .IDENTIFIER, value = next_token(stream, []token_type { .IDENTIFIER }).value }
+    lhs_token := next_token(stream, []token_type { .IDENTIFIER })
+    lhs_node := ast_node { .IDENTIFIER, lhs_token.value, {}, lhs_token.line_number, lhs_token.column_number }
     append(&node.children, lhs_node)
 
     next_token(stream, []token_type { .EQUALS })
@@ -189,6 +219,9 @@ parse_expression_1 :: proc(stream: ^token_stream, lhs: ast_node, min_precedence:
 
 parse_primary :: proc(stream: ^token_stream) -> (node: ast_node)
 {
+    node.line_number = peek_token(stream).line_number
+    node.column_number = peek_token(stream).column_number
+
     if peek_token(stream).type == .OPENING_BRACKET
     {
         next_token(stream, []token_type { .OPENING_BRACKET })
@@ -211,9 +244,6 @@ parse_primary :: proc(stream: ^token_stream) -> (node: ast_node)
 
         return
     }
-
-    node.line_number = peek_token(stream).line_number
-    node.column_number = peek_token(stream).column_number
 
     token := next_token(stream, []token_type { .IDENTIFIER, .INTEGER_LITERAL })
 

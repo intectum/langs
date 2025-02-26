@@ -5,10 +5,12 @@ import "core:os"
 import "core:strings"
 import "core:strconv"
 
-stack :: struct
+gen_context :: struct
 {
-    top: int,
-    vars: map[string]int
+    stack_top: int,
+    stack_vars: map[string]int,
+
+    if_index: int
 }
 
 generate_program :: proc(file_name: string, nodes: [dynamic]ast_node)
@@ -24,11 +26,11 @@ generate_program :: proc(file_name: string, nodes: [dynamic]ast_node)
     fmt.fprintln(file, "global _start")
     fmt.fprintln(file, "_start:")
 
-    stack: stack
+    ctx: gen_context
 
     for node in nodes
     {
-        generate_statement(file, node, &stack)
+        generate_statement(file, node, &ctx)
     }
 
     fmt.fprintln(file, "  ; default exit")
@@ -37,18 +39,20 @@ generate_program :: proc(file_name: string, nodes: [dynamic]ast_node)
     fmt.fprintln(file, "  syscall ; call kernel")
 }
 
-generate_statement :: proc(file: os.Handle, node: ast_node, stack: ^stack)
+generate_statement :: proc(file: os.Handle, node: ast_node, ctx: ^gen_context)
 {
     #partial switch node.type
     {
+    case .IF:
+        generate_if(file, node, ctx)
     case .SCOPE:
-        generate_scope(file, node, stack)
+        generate_scope(file, node, ctx)
     case .DECLARATION:
-        generate_declaration(file, node, stack)
+        generate_declaration(file, node, ctx)
     case .ASSIGNMENT:
-        generate_assignment(file, node, stack)
+        generate_assignment(file, node, ctx)
     case .EXIT:
-        generate_exit(file, node, stack)
+        generate_exit(file, node, ctx)
     case:
         fmt.println("Failed to generate statement")
         fmt.printfln("Invalid node at line %i, column %i", node.line_number, node.column_number)
@@ -56,86 +60,123 @@ generate_statement :: proc(file: os.Handle, node: ast_node, stack: ^stack)
     }
 }
 
-generate_scope :: proc(file: os.Handle, node: ast_node, parent_stack: ^stack)
+generate_if :: proc(file: os.Handle, node: ast_node, ctx: ^gen_context)
+{
+    fmt.fprintln(file, "  ; if")
+
+    expression_node := node.children[0]
+    scope_node := node.children[1]
+
+    has_else := len(node.children) == 3
+
+    generate_expression(file, expression_node, ctx)
+    fmt.fprintln(file, "  test r8, r8 ; test expression")
+    fmt.fprintfln(file, "  jz .if_%i_%s ; skip main scope when false/zero", ctx.if_index, has_else ? "else" : "end")
+
+    generate_scope(file, scope_node, ctx)
+
+    if has_else
+    {
+        fmt.fprintfln(file, "  jmp .if_%i_end ; skip else scope", ctx.if_index)
+
+        else_scope_node := node.children[2]
+
+        fmt.fprintfln(file, ".if_%i_else:", ctx.if_index)
+
+        generate_scope(file, else_scope_node, ctx)
+    }
+
+    fmt.fprintfln(file, ".if_%i_end:", ctx.if_index)
+
+    ctx.if_index += 1
+}
+
+generate_scope :: proc(file: os.Handle, node: ast_node, parent_ctx: ^gen_context)
 {
     fmt.fprintln(file, "; scope start")
 
-    scope_stack: stack
-    scope_stack.top = parent_stack.top
-    for key in parent_stack.vars
+    scope_ctx: gen_context
+    scope_ctx.stack_top = parent_ctx.stack_top
+    for key in parent_ctx.stack_vars
     {
-        scope_stack.vars[key] = parent_stack.vars[key]
+        scope_ctx.stack_vars[key] = parent_ctx.stack_vars[key]
     }
+    scope_ctx.if_index = parent_ctx.if_index
 
     for child_node in node.children
     {
-        generate_statement(file, child_node, &scope_stack)
+        generate_statement(file, child_node, &scope_ctx)
     }
 
-    scope_stack_size := scope_stack.top - parent_stack.top
+    parent_ctx.if_index = scope_ctx.if_index
 
-    fmt.fprintln(file, "  ; close scope")
-    fmt.fprintfln(file, "  add rsp, %i ; clear scope's stack", scope_stack_size)
+    scope_stack_size := scope_ctx.stack_top - parent_ctx.stack_top
+    if scope_stack_size > 0
+    {
+        fmt.fprintln(file, "  ; close scope")
+        fmt.fprintfln(file, "  add rsp, %i ; clear scope's stack", scope_stack_size)
+    }
+
     fmt.fprintln(file, "; scope end")
 }
 
-generate_declaration :: proc(file: os.Handle, node: ast_node, stack: ^stack)
+generate_declaration :: proc(file: os.Handle, node: ast_node, ctx: ^gen_context)
 {
     fmt.fprintln(file, "  ; declare")
 
     lhs_node := node.children[0]
     rhs_node := node.children[1]
 
-    if lhs_node.value in stack.vars
+    if lhs_node.value in ctx.stack_vars
     {
         fmt.println("Failed to generate declaration")
         fmt.printfln("Duplicate identifier '%s' at line %i, column %i", lhs_node.value, lhs_node.line_number, lhs_node.column_number)
         os.exit(1)
     }
 
-    generate_expression(file, rhs_node, stack)
+    generate_expression(file, rhs_node, ctx)
     fmt.fprintln(file, "  push r8 ; push to stack")
-    stack.vars[lhs_node.value] = stack.top
-    stack.top += 8
+    ctx.stack_top += 8
+    ctx.stack_vars[lhs_node.value] = ctx.stack_top
 }
 
-generate_assignment :: proc(file: os.Handle, node: ast_node, stack: ^stack)
+generate_assignment :: proc(file: os.Handle, node: ast_node, ctx: ^gen_context)
 {
     fmt.fprintln(file, "  ; assign")
 
     lhs_node := node.children[0]
     rhs_node := node.children[1]
 
-    if !(lhs_node.value in stack.vars)
+    if !(lhs_node.value in ctx.stack_vars)
     {
         fmt.println("Failed to generate assignment")
         fmt.printfln("Undeclared identifier '%s' at line %i, column %i", lhs_node.value, lhs_node.line_number, lhs_node.column_number)
         os.exit(1)
     }
 
-    var_pointer := stack.vars[lhs_node.value]
-    var_offset := stack.top - var_pointer
-    generate_expression(file, rhs_node, stack)
+    var_pointer := ctx.stack_vars[lhs_node.value]
+    var_offset := ctx.stack_top - var_pointer
+    generate_expression(file, rhs_node, ctx)
     fmt.fprintfln(file, "  mov [rsp+%i], r8 ; assign value", var_offset)
 }
 
-generate_exit :: proc(file: os.Handle, node: ast_node, stack: ^stack)
+generate_exit :: proc(file: os.Handle, node: ast_node, ctx: ^gen_context)
 {
     fmt.fprintln(file, "  ; exit")
 
     param_node := node.children[0]
 
-    generate_expression(file, param_node, stack)
+    generate_expression(file, param_node, ctx)
     fmt.fprintln(file, "  mov rax, 60 ; syscall: exit")
     fmt.fprintln(file, "  mov rdi, r8 ; arg0: exit_code")
     fmt.fprintln(file, "  syscall ; call kernel")
 }
 
-generate_expression :: proc(file: os.Handle, node: ast_node, stack: ^stack, register_num: int = 8)
+generate_expression :: proc(file: os.Handle, node: ast_node, ctx: ^gen_context, register_num: int = 8)
 {
     if len(node.children) < 2
     {
-        generate_primary(file, node, stack, register_num)
+        generate_primary(file, node, ctx, register_num)
         return
     }
 
@@ -145,8 +186,8 @@ generate_expression :: proc(file: os.Handle, node: ast_node, stack: ^stack, regi
     lhs_register_num := register_num / 2 * 2 + 2
     rhs_register_num := lhs_register_num + 1
 
-    generate_expression(file, lhs_node, stack, lhs_register_num)
-    generate_expression(file, rhs_node, stack, rhs_register_num)
+    generate_expression(file, lhs_node, ctx, lhs_register_num)
+    generate_expression(file, rhs_node, ctx, rhs_register_num)
 
     #partial switch node.type
     {
@@ -172,19 +213,19 @@ generate_expression :: proc(file: os.Handle, node: ast_node, stack: ^stack, regi
     }
 }
 
-generate_primary :: proc(file: os.Handle, node: ast_node, stack: ^stack, register_num: int)
+generate_primary :: proc(file: os.Handle, node: ast_node, ctx: ^gen_context, register_num: int)
 {
     if node.type == .IDENTIFIER
     {
-        if !(node.value in stack.vars)
+        if !(node.value in ctx.stack_vars)
         {
             fmt.println("Failed to generate term")
             fmt.printfln("Undeclared identifier '%s' at line %i, column %i", node.value, node.line_number, node.column_number)
             os.exit(1)
         }
 
-        var_pointer := stack.vars[node.value]
-        var_offset := stack.top - var_pointer
+        var_pointer := ctx.stack_vars[node.value]
+        var_offset := ctx.stack_top - var_pointer
         fmt.fprintfln(file, "  mov r%i, [rsp+%i] ; assign primary", register_num, var_offset)
     }
     else if node.type == .INTEGER_LITERAL
@@ -193,11 +234,11 @@ generate_primary :: proc(file: os.Handle, node: ast_node, stack: ^stack, registe
     }
     else if node.type == .NEGATE
     {
-        generate_primary(file, node.children[0], stack, register_num)
+        generate_primary(file, node.children[0], ctx, register_num)
         fmt.fprintfln(file, "  neg r%i ; negate", register_num)
     }
     else
     {
-        generate_expression(file, node, stack, register_num)
+        generate_expression(file, node, ctx, register_num)
     }
 }

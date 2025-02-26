@@ -16,9 +16,13 @@ token_type :: enum
   MINUS,
   ASTERISK,
   BACKSLASH,
+  KEYWORD,
   IDENTIFIER,
-  INTEGER_LITERAL
+  INTEGER_LITERAL,
+  END_OF_FILE
 }
+
+keywords: []string = { "if", "else" }
 
 token :: struct
 {
@@ -38,10 +42,7 @@ peek_token :: proc(stream: ^token_stream, offset: int = 0) -> token
 {
   if stream.next_index + offset >= len(stream.tokens)
   {
-    last_token := stream.tokens[len(stream.tokens) - 1]
-
-    fmt.printfln("Unexpected end of file after token at line %i, column %i", last_token.line_number, last_token.column_number)
-    os.exit(1)
+    return { type = .END_OF_FILE }
   }
 
   return stream.tokens[stream.next_index + offset]
@@ -50,7 +51,8 @@ peek_token :: proc(stream: ^token_stream, offset: int = 0) -> token
 next_token :: proc
 {
   next_token_any,
-  next_token_of_type
+  next_token_of_type_and_value,
+  next_token_of_types
 }
 
 next_token_any :: proc(stream: ^token_stream) -> token
@@ -61,7 +63,30 @@ next_token_any :: proc(stream: ^token_stream) -> token
   return next_token
 }
 
-next_token_of_type :: proc(stream: ^token_stream, types: []token_type) -> token
+next_token_of_type_and_value :: proc(stream: ^token_stream, type: token_type, value: string) -> token
+{
+  next_token := next_token_any(stream)
+
+  if next_token.type != type
+  {
+    fmt.printfln("Invalid token at line %i, column %i", next_token.line_number, next_token.column_number)
+    fmt.printfln("Expected type: %s", type)
+    fmt.printfln("Found type: %s", next_token.type)
+    os.exit(1)
+  }
+
+  if next_token.value != value
+  {
+    fmt.printfln("Invalid token at line %i, column %i", next_token.line_number, next_token.column_number)
+    fmt.printfln("Expected: %s", value)
+    fmt.printfln("Found: %s", next_token.value)
+    os.exit(1)
+  }
+
+  return next_token
+}
+
+next_token_of_types :: proc(stream: ^token_stream, types: []token_type) -> token
 {
   next_token := next_token_any(stream)
 
@@ -78,8 +103,8 @@ next_token_of_type :: proc(stream: ^token_stream, types: []token_type) -> token
   if !type_found
   {
     fmt.printfln("Invalid token at line %i, column %i", next_token.line_number, next_token.column_number)
-    fmt.printfln("Expected: %s", types)
-    fmt.printfln("Found: %s", next_token.type)
+    fmt.printfln("Expected type: %s", types)
+    fmt.printfln("Found type: %s", next_token.type)
     os.exit(1)
   }
 
@@ -182,12 +207,20 @@ tokenize :: proc(src: string) -> (tokens: [dynamic]token)
       start_index := index
       end_index := index + 1
 
-      for (src[end_index] >= 'a' && src[end_index] <= 'z') || (src[end_index] >= 'A' && src[end_index] <= 'Z') || src[end_index] == '_' || (src[end_index] >= '0' && src[end_index] <= '9')
+      for end_index < len(src) && ((src[end_index] >= 'a' && src[end_index] <= 'z') || (src[end_index] >= 'A' && src[end_index] <= 'Z') || src[end_index] == '_' || (src[end_index] >= '0' && src[end_index] <= '9'))
       {
         end_index += 1
       }
 
-      append(&tokens, token { .IDENTIFIER, src[start_index:end_index], line_number, column_number })
+      token := token { .IDENTIFIER, src[start_index:end_index], line_number, column_number }
+      for keyword in keywords
+      {
+        if token.value == keyword
+        {
+          token.type = .KEYWORD
+        }
+      }
+      append(&tokens, token)
 
       index = end_index
       column_number += end_index - start_index
@@ -197,7 +230,7 @@ tokenize :: proc(src: string) -> (tokens: [dynamic]token)
       start_index := index
       end_index := index + 1
 
-      for src[end_index] >= '0' && src[end_index] <= '9'
+      for end_index < len(src) && src[end_index] >= '0' && src[end_index] <= '9'
       {
         end_index += 1
       }
