@@ -2,7 +2,8 @@ $$
 \begin{align}
 program\ &\to\ statement^*\\
 statement\ &\to\ if\ |\ scope\ |\ declaration\ |\ assignment\ |\ exit \\
-if\ &\to\ \text{"if"}\ expression\ scope\ (\ \text{"else"}\ scope\ )?\\
+if\ &\to\ \text{"if"}\ expression\ scope\ (\ \text{"else"}\ \text{"if"}\ expression\ scope\ )^*\ (\ \text{"else"}\ scope\ )?\\
+for\ &\to\ \text{"for"}\ (\ expression\ |\ declaration\ \text{","}\ expression\ \text{","}\ assignment\ )\ scope\\
 scope\ &\to\ \text{"\{"}\ statement^*\ \text{"\}"}\\
 declaration\ &\to\ identifier\ \text{":"}\ \text{"="}\ expression\\
 assignment\ &\to\ identifier\ \text{"="}\ expression\\

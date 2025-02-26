@@ -6,6 +6,7 @@ import "core:os"
 ast_node_type :: enum
 {
     IF,
+    FOR,
     SCOPE,
     DECLARATION,
     ASSIGNMENT,
@@ -58,7 +59,14 @@ parse_statement :: proc(stream: ^token_stream) -> (node: ast_node)
             os.exit(1)
         }
     case .KEYWORD:
-        node = parse_if(stream)
+        if peek_token(stream).value == "for"
+        {
+            node = parse_for(stream)
+        }
+        else if peek_token(stream).value == "if"
+        {
+            node = parse_if(stream)
+        }
     case .OPENING_SQUIGGLY_BRACKET:
         node = parse_scope(stream)
     case:
@@ -85,6 +93,18 @@ parse_if :: proc(stream: ^token_stream) -> (node: ast_node)
     scope_node := parse_scope(stream)
     append(&node.children, scope_node)
 
+    for peek_token(stream).value == "else" && peek_token(stream, 1).value == "if"
+    {
+        next_token(stream, token_type.KEYWORD, "else")
+        next_token(stream, token_type.KEYWORD, "if")
+
+        else_if_expression_node := parse_expression(stream)
+        append(&node.children, else_if_expression_node)
+
+        else_if_scope_node := parse_scope(stream)
+        append(&node.children, else_if_scope_node)
+    }
+
     if peek_token(stream).value == "else"
     {
         next_token(stream, token_type.KEYWORD, "else")
@@ -92,6 +112,42 @@ parse_if :: proc(stream: ^token_stream) -> (node: ast_node)
         else_scope_node := parse_scope(stream)
         append(&node.children, else_scope_node)
     }
+
+    return
+}
+
+parse_for :: proc(stream: ^token_stream) -> (node: ast_node)
+{
+    node.type = .FOR
+    node.line_number = peek_token(stream).line_number
+    node.column_number = peek_token(stream).column_number
+
+    next_token(stream, token_type.KEYWORD, "for")
+
+    // TODO this is way too manual checking...
+    if peek_token(stream).type == .IDENTIFIER && peek_token(stream, 1).type == .COLON
+    {
+        declaration_node := parse_declaration(stream)
+        append(&node.children, declaration_node)
+
+        next_token(stream, []token_type { .COMMA })
+
+        expression_node := parse_expression(stream)
+        append(&node.children, expression_node)
+
+        next_token(stream, []token_type { .COMMA })
+
+        assignment_node := parse_assignment(stream)
+        append(&node.children, assignment_node)
+    }
+    else
+    {
+        expression_node := parse_expression(stream)
+        append(&node.children, expression_node)
+    }
+
+    scope_node := parse_scope(stream)
+    append(&node.children, scope_node)
 
     return
 }

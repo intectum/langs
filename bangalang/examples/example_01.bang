@@ -23,9 +23,42 @@ if z - 77
     result = 5
     result = 3 * result
 }
+else if result
+{
+    result = 42
+}
+else if z + 77
+{
+    if 0
+    {
+        result = 43
+    }
+    else if z - 77
+    {
+        result = 44
+    }
+    else
+    {
+        result = 45
+    }
+}
 else
 {
     result = 9
 }
 
-exit(result)
+sum_0 := 0
+index_0 := 10
+for index_0
+{
+    sum_0 = sum_0 + index_0
+    index_0 = index_0 - 1
+}
+
+sum_1 := 0
+for index_1 := 10, index_1, index_1 = index_1 - 1
+{
+    sum_1 = sum_1 + index_1
+}
+
+exit(sum_1)

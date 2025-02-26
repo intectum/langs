@@ -16,13 +16,14 @@ token_type :: enum
   MINUS,
   ASTERISK,
   BACKSLASH,
+  COMMA,
   KEYWORD,
   IDENTIFIER,
   INTEGER_LITERAL,
   END_OF_FILE
 }
 
-keywords: []string = { "if", "else" }
+keywords: []string = { "else", "for", "if" }
 
 token :: struct
 {
@@ -198,6 +199,13 @@ tokenize :: proc(src: string) -> (tokens: [dynamic]token)
     else if src[index] == '/'
     {
       append(&tokens, token { .BACKSLASH, "/", line_number, column_number })
+
+      index += 1
+      column_number += 1
+    }
+    else if src[index] == ','
+    {
+      append(&tokens, token { .COMMA, ",", line_number, column_number })
 
       index += 1
       column_number += 1

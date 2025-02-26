@@ -10,7 +10,8 @@ gen_context :: struct
     stack_top: int,
     stack_vars: map[string]int,
 
-    if_index: int
+    if_index: int,
+    for_index: int
 }
 
 generate_program :: proc(file_name: string, nodes: [dynamic]ast_node)
@@ -45,6 +46,8 @@ generate_statement :: proc(file: os.Handle, node: ast_node, ctx: ^gen_context)
     {
     case .IF:
         generate_if(file, node, ctx)
+    case .FOR:
+        generate_for(file, node, ctx)
     case .SCOPE:
         generate_scope(file, node, ctx)
     case .DECLARATION:
@@ -62,33 +65,94 @@ generate_statement :: proc(file: os.Handle, node: ast_node, ctx: ^gen_context)
 
 generate_if :: proc(file: os.Handle, node: ast_node, ctx: ^gen_context)
 {
-    fmt.fprintln(file, "  ; if")
+    if_index := ctx.if_index
+    ctx.if_index += 1
+
+    fmt.fprintfln(file, "; if_%i", if_index)
 
     expression_node := node.children[0]
     scope_node := node.children[1]
 
-    has_else := len(node.children) == 3
+    child_index := 2
+    else_index := 0
 
     generate_expression(file, expression_node, ctx)
     fmt.fprintln(file, "  test r8, r8 ; test expression")
-    fmt.fprintfln(file, "  jz .if_%i_%s ; skip main scope when false/zero", ctx.if_index, has_else ? "else" : "end")
+    fmt.fprintfln(file, "  jz .if_%i_%s ; skip main scope when false/zero", if_index, child_index < len(node.children) ? "else_0" : "end")
 
     generate_scope(file, scope_node, ctx)
 
-    if has_else
+    for child_index + 1 < len(node.children)
     {
-        fmt.fprintfln(file, "  jmp .if_%i_end ; skip else scope", ctx.if_index)
+        fmt.fprintfln(file, "  jmp .if_%i_end ; skip else scope", if_index)
+        fmt.fprintfln(file, ".if_%i_else_%i:", if_index, else_index)
+        else_index += 1
 
-        else_scope_node := node.children[2]
+        generate_expression(file, node.children[child_index], ctx)
+        child_index += 1
 
-        fmt.fprintfln(file, ".if_%i_else:", ctx.if_index)
+        fmt.fprintln(file, "  test r8, r8 ; test expression")
 
-        generate_scope(file, else_scope_node, ctx)
+        buf: [256]byte
+        else_with_index := strings.concatenate({ "else_", strconv.itoa(buf[:], else_index) })
+        fmt.fprintfln(file, "  jz .if_%i_%s ; skip else scope when false/zero", if_index, child_index + 1 < len(node.children) ? else_with_index : "end")
+
+        generate_scope(file, node.children[child_index], ctx)
+        child_index += 1
     }
 
-    fmt.fprintfln(file, ".if_%i_end:", ctx.if_index)
+    if child_index < len(node.children)
+    {
+        fmt.fprintfln(file, "  jmp .if_%i_end ; skip else scope", if_index)
+        fmt.fprintfln(file, ".if_%i_else_%i:", if_index, else_index)
+        else_index += 1
 
-    ctx.if_index += 1
+        generate_scope(file, node.children[child_index], ctx)
+        child_index += 1
+    }
+
+    fmt.fprintfln(file, ".if_%i_end:", if_index)
+}
+
+generate_for :: proc(file: os.Handle, node: ast_node, ctx: ^gen_context)
+{
+    for_index := ctx.for_index
+    ctx.for_index += 1
+
+    if node.children[0].type == .DECLARATION
+    {
+        declaration_node := node.children[0]
+        generate_declaration(file, declaration_node, ctx)
+
+        fmt.fprintfln(file, ".for_%i:", for_index)
+
+        expression_node := node.children[1]
+        generate_expression(file, expression_node, ctx)
+        fmt.fprintln(file, "  test r8, r8 ; test expression")
+        fmt.fprintfln(file, "  jz .for_%i_end ; skip for scope when false/zero", for_index)
+    }
+    else
+    {
+        fmt.fprintfln(file, ".for_%i:", for_index)
+
+        expression_node := node.children[0]
+        generate_expression(file, expression_node, ctx)
+        fmt.fprintln(file, "  test r8, r8 ; test expression")
+        fmt.fprintfln(file, "  jz .for_%i_end ; skip for scope when false/zero", for_index)
+    }
+
+    scope_node := node.children[len(node.children) - 1]
+    generate_scope(file, scope_node, ctx)
+
+    if node.children[0].type == .DECLARATION
+    {
+        assignment_node := node.children[2]
+        generate_assignment(file, assignment_node, ctx)
+    }
+
+    fmt.fprintfln(file, "  jmp .for_%i ; back to top", for_index)
+
+    fmt.fprintfln(file, ".for_%i_end:", for_index)
 }
 
 generate_scope :: proc(file: os.Handle, node: ast_node, parent_ctx: ^gen_context)
