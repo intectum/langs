@@ -5,6 +5,12 @@ import "core:os"
 import "core:strings"
 import "core:strconv"
 
+procedure :: struct
+{
+    name: string,
+    param_count: int
+}
+
 gen_context :: struct
 {
     stack_top: int,
@@ -13,6 +19,8 @@ gen_context :: struct
     if_index: int,
     for_index: int
 }
+
+procedures := []procedure { { "add", 2 }, { "exit", 1 }, { "plus_one", 1 } }
 
 generate_program :: proc(file_name: string, nodes: [dynamic]ast_node)
 {
@@ -38,6 +46,22 @@ generate_program :: proc(file_name: string, nodes: [dynamic]ast_node)
     fmt.fprintln(file, "  mov rax, 60 ; syscall: exit")
     fmt.fprintln(file, "  mov rdi, 0 ; arg0: exit_code")
     fmt.fprintln(file, "  syscall ; call kernel")
+
+    fmt.fprintln(file, "exit:")
+    fmt.fprintln(file, "  mov rax, 60 ; syscall: exit")
+    fmt.fprintln(file, "  mov rdi, [rsp+8] ; arg0: exit_code")
+    fmt.fprintln(file, "  syscall ; call kernel")
+    fmt.fprintln(file, "  ret ; return")
+
+    fmt.fprintln(file, "plus_one:")
+    fmt.fprintln(file, "  mov r8, [rsp+8] ; assign arg0")
+    fmt.fprintln(file, "  inc r8 ; do it!")
+    fmt.fprintln(file, "  ret ; return")
+
+    fmt.fprintln(file, "add:")
+    fmt.fprintln(file, "  mov r8, [rsp+16] ; assign arg0")
+    fmt.fprintln(file, "  add r8, [rsp+8] ; do it!")
+    fmt.fprintln(file, "  ret ; return")
 }
 
 generate_statement :: proc(file: os.Handle, node: ast_node, ctx: ^gen_context)
@@ -54,8 +78,9 @@ generate_statement :: proc(file: os.Handle, node: ast_node, ctx: ^gen_context)
         generate_declaration(file, node, ctx)
     case .ASSIGNMENT:
         generate_assignment(file, node, ctx)
-    case .EXIT:
-        generate_exit(file, node, ctx)
+    case .CALL:
+        fmt.fprintln(file, "  ; call")
+        generate_call(file, node, ctx)
     case:
         fmt.println("Failed to generate statement")
         fmt.printfln("Invalid node at line %i, column %i", node.line_number, node.column_number)
@@ -121,6 +146,7 @@ generate_for :: proc(file: os.Handle, node: ast_node, ctx: ^gen_context)
 
     if node.children[0].type == .DECLARATION
     {
+        // TODO should be scoped to for loop
         declaration_node := node.children[0]
         generate_declaration(file, declaration_node, ctx)
 
@@ -224,21 +250,9 @@ generate_assignment :: proc(file: os.Handle, node: ast_node, ctx: ^gen_context)
     fmt.fprintfln(file, "  mov [rsp+%i], r8 ; assign value", var_offset)
 }
 
-generate_exit :: proc(file: os.Handle, node: ast_node, ctx: ^gen_context)
-{
-    fmt.fprintln(file, "  ; exit")
-
-    param_node := node.children[0]
-
-    generate_expression(file, param_node, ctx)
-    fmt.fprintln(file, "  mov rax, 60 ; syscall: exit")
-    fmt.fprintln(file, "  mov rdi, r8 ; arg0: exit_code")
-    fmt.fprintln(file, "  syscall ; call kernel")
-}
-
 generate_expression :: proc(file: os.Handle, node: ast_node, ctx: ^gen_context, register_num: int = 8)
 {
-    if len(node.children) < 2
+    if node.type != .ADD && node.type != .SUBTRACT && node.type != .MULTIPLY && node.type != .DIVIDE
     {
         generate_primary(file, node, ctx, register_num)
         return
@@ -279,11 +293,14 @@ generate_expression :: proc(file: os.Handle, node: ast_node, ctx: ^gen_context, 
 
 generate_primary :: proc(file: os.Handle, node: ast_node, ctx: ^gen_context, register_num: int)
 {
-    if node.type == .IDENTIFIER
+    #partial switch node.type
     {
+    case .CALL:
+        generate_call(file, node, ctx, register_num)
+    case .IDENTIFIER:
         if !(node.value in ctx.stack_vars)
         {
-            fmt.println("Failed to generate term")
+            fmt.println("Failed to generate primary")
             fmt.printfln("Undeclared identifier '%s' at line %i, column %i", node.value, node.line_number, node.column_number)
             os.exit(1)
         }
@@ -291,18 +308,52 @@ generate_primary :: proc(file: os.Handle, node: ast_node, ctx: ^gen_context, reg
         var_pointer := ctx.stack_vars[node.value]
         var_offset := ctx.stack_top - var_pointer
         fmt.fprintfln(file, "  mov r%i, [rsp+%i] ; assign primary", register_num, var_offset)
-    }
-    else if node.type == .INTEGER_LITERAL
-    {
+    case .INTEGER_LITERAL:
         fmt.fprintfln(file, "  mov r%i, %s ; assign primary", register_num, node.value)
-    }
-    else if node.type == .NEGATE
-    {
+    case .NEGATE:
         generate_primary(file, node.children[0], ctx, register_num)
         fmt.fprintfln(file, "  neg r%i ; negate", register_num)
-    }
-    else
-    {
+    case:
         generate_expression(file, node, ctx, register_num)
     }
+}
+
+generate_call :: proc(file: os.Handle, node: ast_node, ctx: ^gen_context, register_num: int = 8)
+{
+    child_index := 0
+    name_node := node.children[child_index]
+    child_index += 1
+
+    found_procedure := false
+    for procedure in procedures
+    {
+        if procedure.name == name_node.value && procedure.param_count == len(node.children) - 1
+        {
+            found_procedure = true
+            break
+        }
+    }
+
+    if !found_procedure
+    {
+        fmt.println("Failed to generate call")
+        fmt.printfln("Undeclared identifier '%s' at line %i, column %i", name_node.value, name_node.line_number, name_node.column_number)
+        os.exit(1)
+    }
+
+    for child_index < len(node.children)
+    {
+        param_node := node.children[child_index]
+        child_index += 1
+
+        generate_expression(file, param_node, ctx)
+        fmt.fprintln(file, "  push r8; push to stack")
+    }
+
+    fmt.fprintfln(file, "  call %s; call procedure", name_node.value)
+
+    param_count := len(node.children) - 1
+    fmt.fprintfln(file, "  add rsp, %i ; clear params from stack", param_count * 8)
+
+    fmt.fprintfln(file, "  mov r%i, r8; assign return value", register_num)
 }

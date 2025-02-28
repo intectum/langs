@@ -61,4 +61,6 @@ for index_1 := 10, index_1, index_1 = index_1 - 1
     sum_1 = sum_1 + index_1
 }
 
-exit(sum_1)
+sum_1_plus_1 := plus_one(add(2, 5))
+
+exit(plus_one(sum_1) + 4 * add(2, 5))

@@ -10,12 +10,12 @@ ast_node_type :: enum
     SCOPE,
     DECLARATION,
     ASSIGNMENT,
-    EXIT,
     ADD,
     SUBTRACT,
     MULTIPLY,
     DIVIDE,
     NEGATE,
+    CALL,
     IDENTIFIER,
     INTEGER_LITERAL
 }
@@ -51,7 +51,7 @@ parse_statement :: proc(stream: ^token_stream) -> (node: ast_node)
         case .EQUALS:
             node = parse_assignment(stream)
         case .OPENING_BRACKET:
-            node = parse_exit(stream)
+            node = parse_call(stream)
         case:
             token := peek_token(stream, 1)
             fmt.println("Failed to parse statement")
@@ -66,6 +66,13 @@ parse_statement :: proc(stream: ^token_stream) -> (node: ast_node)
         else if peek_token(stream).value == "if"
         {
             node = parse_if(stream)
+        }
+        else
+        {
+            token := peek_token(stream)
+            fmt.println("Failed to parse statement")
+            fmt.printfln("Invalid token '%s' at line %i, column %i", token.value, token.line_number, token.column_number)
+            os.exit(1)
         }
     case .OPENING_SQUIGGLY_BRACKET:
         node = parse_scope(stream)
@@ -212,31 +219,6 @@ parse_assignment :: proc(stream: ^token_stream) -> (node: ast_node)
     return
 }
 
-parse_exit :: proc(stream: ^token_stream) -> (node: ast_node)
-{
-    node.type = .EXIT
-    node.line_number = peek_token(stream).line_number
-    node.column_number = peek_token(stream).column_number
-
-    exit_token := next_token(stream, []token_type { .IDENTIFIER })
-    if exit_token.value != "exit"
-    {
-        fmt.println("Failed to parse exit")
-        fmt.println("That doesn't say exit!")
-        fmt.printfln("Invalid token '%s' at line %i, column %i", exit_token.value, exit_token.line_number, exit_token.column_number)
-        os.exit(1)
-    }
-
-    next_token(stream, []token_type { .OPENING_BRACKET })
-
-    param_node := parse_expression(stream)
-    append(&node.children, param_node)
-
-    next_token(stream, []token_type { .CLOSING_BRACKET })
-
-    return
-}
-
 // Based on https://en.wikipedia.org/wiki/Operator-precedence_parser#Pseudocode
 parse_expression :: proc(stream: ^token_stream) -> (node: ast_node)
 {
@@ -289,6 +271,13 @@ parse_primary :: proc(stream: ^token_stream) -> (node: ast_node)
         return
     }
 
+    if peek_token(stream).type == .IDENTIFIER && peek_token(stream, 1).type == .OPENING_BRACKET
+    {
+        node = parse_call(stream)
+
+        return
+    }
+
     if peek_token(stream).type == .MINUS
     {
         next_token(stream, []token_type { .MINUS })
@@ -316,6 +305,34 @@ parse_primary :: proc(stream: ^token_stream) -> (node: ast_node)
         fmt.printfln("Invalid token '%s' at line %i, column %i", token.value, token.line_number, token.column_number)
         os.exit(1)
     }
+
+    return
+}
+
+parse_call :: proc(stream: ^token_stream) -> (node: ast_node)
+{
+    node.type = .CALL
+    node.line_number = peek_token(stream).line_number
+    node.column_number = peek_token(stream).column_number
+
+    name_token := next_token(stream, []token_type { .IDENTIFIER })
+    name_node := ast_node { .IDENTIFIER, name_token.value, {}, name_token.line_number, name_token.column_number }
+    append(&node.children, name_node)
+
+    next_token(stream, []token_type { .OPENING_BRACKET })
+
+    for peek_token(stream).type != .CLOSING_BRACKET
+    {
+        param_node := parse_expression(stream)
+        append(&node.children, param_node)
+
+        if peek_token(stream).type != .CLOSING_BRACKET
+        {
+            next_token(stream, []token_type { .COMMA })
+        }
+    }
+
+    next_token(stream, []token_type { .CLOSING_BRACKET })
 
     return
 }
