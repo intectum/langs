@@ -23,7 +23,7 @@ token_type :: enum
   END_OF_FILE
 }
 
-keywords: []string = { "else", "for", "if" }
+keywords: []string = { "else", "for", "if", "proc", "return" }
 
 token :: struct
 {

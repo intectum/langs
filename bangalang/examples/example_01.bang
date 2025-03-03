@@ -63,4 +63,32 @@ for index_1 := 10, index_1, index_1 = index_1 - 1
 
 sum_1_plus_1 := plus_one(add(2, 5))
 
-exit(plus_one(sum_1) + 4 * add(2, 5))
+foo := plus_one(sum_1) + 4 * add(2, 5)
+
+return pow(3, 3)
+
+plus_two := proc(num)
+{
+    return num + 2
+}
+
+do_plus_two := proc(num)
+{
+    bar := 0
+
+    return plus_two(num)
+}
+
+pow := proc(num, exp)
+{
+    result := num
+
+    exp = exp - 1
+    for exp
+    {
+        result = result * num
+        exp = exp - 1
+    }
+
+    return result
+}

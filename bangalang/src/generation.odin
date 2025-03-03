@@ -13,6 +13,9 @@ procedure :: struct
 
 gen_context :: struct
 {
+    procedures: [dynamic]procedure,
+    in_proc: bool,
+
     stack_top: int,
     stack_vars: map[string]int,
 
@@ -20,7 +23,7 @@ gen_context :: struct
     for_index: int
 }
 
-procedures := []procedure { { "add", 2 }, { "exit", 1 }, { "plus_one", 1 } }
+built_in_procedures := []procedure { { "add", 2 }, { "exit", 1 }, { "plus_one", 1 } }
 
 generate_program :: proc(file_name: string, nodes: [dynamic]ast_node)
 {
@@ -39,7 +42,18 @@ generate_program :: proc(file_name: string, nodes: [dynamic]ast_node)
 
     for node in nodes
     {
-        generate_statement(file, node, &ctx)
+        if node.type == .PROCEDURE
+        {
+            append(&ctx.procedures, procedure { node.children[0].value, len(node.children) - 2 })
+        }
+    }
+
+    for node in nodes
+    {
+        if node.type != .PROCEDURE
+        {
+            generate_statement(file, node, &ctx)
+        }
     }
 
     fmt.fprintln(file, "  ; default exit")
@@ -62,6 +76,42 @@ generate_program :: proc(file_name: string, nodes: [dynamic]ast_node)
     fmt.fprintln(file, "  mov r8, [rsp+16] ; assign arg0")
     fmt.fprintln(file, "  add r8, [rsp+8] ; do it!")
     fmt.fprintln(file, "  ret ; return")
+
+    for node in nodes
+    {
+        if node.type == .PROCEDURE
+        {
+            generate_procedure(file, node, &ctx)
+        }
+    }
+}
+
+generate_procedure :: proc(file: os.Handle, node: ast_node, parent_ctx: ^gen_context)
+{
+    child_index := 0
+    name_node := node.children[child_index]
+    child_index += 1
+
+    scope_ctx := copy_gen_context(parent_ctx^)
+    scope_ctx.in_proc = true
+    for child_index + 1 < len(node.children)
+    {
+        param_node := node.children[child_index]
+        child_index += 1
+
+        scope_ctx.stack_top += 8
+        scope_ctx.stack_vars[param_node.value] = scope_ctx.stack_top
+    }
+    scope_ctx.stack_top += 8
+
+    fmt.fprintfln(file, "%s:", name_node.value)
+
+    scope_node := node.children[child_index]
+    child_index += 1
+
+    generate_scope(file, scope_node, &scope_ctx, true)
+
+    fmt.fprintln(file, "  ret ; return")
 }
 
 generate_statement :: proc(file: os.Handle, node: ast_node, ctx: ^gen_context)
@@ -78,6 +128,8 @@ generate_statement :: proc(file: os.Handle, node: ast_node, ctx: ^gen_context)
         generate_declaration(file, node, ctx)
     case .ASSIGNMENT:
         generate_assignment(file, node, ctx)
+    case .RETURN:
+        generate_return(file, node, ctx)
     case .CALL:
         fmt.fprintln(file, "  ; call")
         generate_call(file, node, ctx)
@@ -181,17 +233,11 @@ generate_for :: proc(file: os.Handle, node: ast_node, ctx: ^gen_context)
     fmt.fprintfln(file, ".for_%i_end:", for_index)
 }
 
-generate_scope :: proc(file: os.Handle, node: ast_node, parent_ctx: ^gen_context)
+generate_scope :: proc(file: os.Handle, node: ast_node, parent_ctx: ^gen_context, include_end_label := false)
 {
     fmt.fprintln(file, "; scope start")
 
-    scope_ctx: gen_context
-    scope_ctx.stack_top = parent_ctx.stack_top
-    for key in parent_ctx.stack_vars
-    {
-        scope_ctx.stack_vars[key] = parent_ctx.stack_vars[key]
-    }
-    scope_ctx.if_index = parent_ctx.if_index
+    scope_ctx := copy_gen_context(parent_ctx^, true)
 
     for child_node in node.children
     {
@@ -199,6 +245,12 @@ generate_scope :: proc(file: os.Handle, node: ast_node, parent_ctx: ^gen_context
     }
 
     parent_ctx.if_index = scope_ctx.if_index
+    parent_ctx.for_index = scope_ctx.for_index
+
+    if include_end_label
+    {
+        fmt.fprintln(file, ".end:")
+    }
 
     scope_stack_size := scope_ctx.stack_top - parent_ctx.stack_top
     if scope_stack_size > 0
@@ -248,6 +300,26 @@ generate_assignment :: proc(file: os.Handle, node: ast_node, ctx: ^gen_context)
     var_offset := ctx.stack_top - var_pointer
     generate_expression(file, rhs_node, ctx)
     fmt.fprintfln(file, "  mov [rsp+%i], r8 ; assign value", var_offset)
+}
+
+generate_return :: proc(file: os.Handle, node: ast_node, ctx: ^gen_context)
+{
+    fmt.fprintln(file, "  ; return")
+
+    expression_node := node.children[0]
+
+    generate_expression(file, expression_node, ctx)
+
+    if ctx.in_proc
+    {
+        fmt.fprintln(file, "  jmp .end ; skip to end")
+    }
+    else
+    {
+        fmt.fprintln(file, "  mov rax, 60 ; syscall: exit")
+        fmt.fprintln(file, "  mov rdi, r8 ; arg0: exit_code")
+        fmt.fprintln(file, "  syscall ; call kernel")
+    }
 }
 
 generate_expression :: proc(file: os.Handle, node: ast_node, ctx: ^gen_context, register_num: int = 8)
@@ -325,7 +397,15 @@ generate_call :: proc(file: os.Handle, node: ast_node, ctx: ^gen_context, regist
     child_index += 1
 
     found_procedure := false
-    for procedure in procedures
+    for procedure in built_in_procedures
+    {
+        if procedure.name == name_node.value && procedure.param_count == len(node.children) - 1
+        {
+            found_procedure = true
+            break
+        }
+    }
+    for procedure in ctx.procedures
     {
         if procedure.name == name_node.value && procedure.param_count == len(node.children) - 1
         {
@@ -347,13 +427,34 @@ generate_call :: proc(file: os.Handle, node: ast_node, ctx: ^gen_context, regist
         child_index += 1
 
         generate_expression(file, param_node, ctx)
-        fmt.fprintln(file, "  push r8; push to stack")
+        fmt.fprintln(file, "  push r8 ; push to stack")
     }
 
-    fmt.fprintfln(file, "  call %s; call procedure", name_node.value)
+    fmt.fprintfln(file, "  call %s ; call procedure", name_node.value)
 
     param_count := len(node.children) - 1
     fmt.fprintfln(file, "  add rsp, %i ; clear params from stack", param_count * 8)
 
-    fmt.fprintfln(file, "  mov r%i, r8; assign return value", register_num)
+    fmt.fprintfln(file, "  mov r%i, r8 ; assign return value", register_num)
+}
+
+copy_gen_context := proc(ctx: gen_context, inline := false) -> gen_context
+{
+    ctx_copy: gen_context
+    ctx_copy.procedures = ctx.procedures
+    ctx_copy.in_proc = ctx.in_proc
+    ctx_copy.stack_top = ctx.stack_top
+
+    if inline
+    {
+        for key in ctx.stack_vars
+        {
+            ctx_copy.stack_vars[key] = ctx.stack_vars[key]
+        }
+
+        ctx_copy.if_index = ctx.if_index
+        ctx_copy.for_index = ctx.for_index
+    }
+
+    return ctx_copy
 }

@@ -5,11 +5,13 @@ import "core:os"
 
 ast_node_type :: enum
 {
+    PROCEDURE,
     IF,
     FOR,
     SCOPE,
     DECLARATION,
     ASSIGNMENT,
+    RETURN,
     ADD,
     SUBTRACT,
     MULTIPLY,
@@ -33,8 +35,50 @@ parse_program :: proc(stream: ^token_stream) -> (nodes: [dynamic]ast_node)
 {
     for stream.next_index < len(stream.tokens)
     {
-        append(&nodes, parse_statement(stream))
+        // TODO this is way too manual checking...
+        if peek_token(stream).type == .IDENTIFIER && peek_token(stream, 1).type == .COLON && peek_token(stream, 2).type == .EQUALS && peek_token(stream, 3).value == "proc"
+        {
+            append(&nodes, parse_procedure(stream))
+        }
+        else
+        {
+            append(&nodes, parse_statement(stream))
+        }
     }
+
+    return
+}
+
+parse_procedure :: proc(stream: ^token_stream) -> (node: ast_node)
+{
+    node.type = .PROCEDURE
+    node.line_number = peek_token(stream).line_number
+    node.column_number = peek_token(stream).column_number
+
+    lhs_node := parse_identifier(stream)
+    append(&node.children, lhs_node)
+
+    next_token(stream, []token_type { .COLON })
+    next_token(stream, []token_type { .EQUALS })
+    next_token(stream, token_type.KEYWORD, "proc")
+    next_token(stream, []token_type { .OPENING_BRACKET })
+
+    for peek_token(stream).type != .CLOSING_BRACKET
+    {
+        param_node := parse_identifier(stream)
+        append(&node.children, param_node)
+
+        // TODO allows comma at end of params
+        if peek_token(stream).type != .CLOSING_BRACKET
+        {
+            next_token(stream, []token_type { .COMMA })
+        }
+    }
+
+    next_token(stream, []token_type { .CLOSING_BRACKET })
+
+    scope_node := parse_scope(stream)
+    append(&node.children, scope_node)
 
     return
 }
@@ -66,6 +110,10 @@ parse_statement :: proc(stream: ^token_stream) -> (node: ast_node)
         else if peek_token(stream).value == "if"
         {
             node = parse_if(stream)
+        }
+        else if peek_token(stream).value == "return"
+        {
+            node = parse_return(stream)
         }
         else
         {
@@ -188,8 +236,7 @@ parse_declaration :: proc(stream: ^token_stream) -> (node: ast_node)
     node.line_number = peek_token(stream).line_number
     node.column_number = peek_token(stream).column_number
 
-    lhs_token := next_token(stream, []token_type { .IDENTIFIER })
-    lhs_node := ast_node { .IDENTIFIER, lhs_token.value, {}, lhs_token.line_number, lhs_token.column_number }
+    lhs_node := parse_identifier(stream)
     append(&node.children, lhs_node)
 
     next_token(stream, []token_type { .COLON })
@@ -207,14 +254,27 @@ parse_assignment :: proc(stream: ^token_stream) -> (node: ast_node)
     node.line_number = peek_token(stream).line_number
     node.column_number = peek_token(stream).column_number
 
-    lhs_token := next_token(stream, []token_type { .IDENTIFIER })
-    lhs_node := ast_node { .IDENTIFIER, lhs_token.value, {}, lhs_token.line_number, lhs_token.column_number }
+    lhs_node := parse_identifier(stream)
     append(&node.children, lhs_node)
 
     next_token(stream, []token_type { .EQUALS })
 
     rhs_node := parse_expression(stream)
     append(&node.children, rhs_node)
+
+    return
+}
+
+parse_return :: proc(stream: ^token_stream) -> (node: ast_node)
+{
+    node.type = .RETURN
+    node.line_number = peek_token(stream).line_number
+    node.column_number = peek_token(stream).column_number
+
+    next_token(stream, token_type.KEYWORD, "return")
+
+    expression_node := parse_expression(stream)
+    append(&node.children, expression_node)
 
     return
 }
@@ -315,8 +375,7 @@ parse_call :: proc(stream: ^token_stream) -> (node: ast_node)
     node.line_number = peek_token(stream).line_number
     node.column_number = peek_token(stream).column_number
 
-    name_token := next_token(stream, []token_type { .IDENTIFIER })
-    name_node := ast_node { .IDENTIFIER, name_token.value, {}, name_token.line_number, name_token.column_number }
+    name_node := parse_identifier(stream)
     append(&node.children, name_node)
 
     next_token(stream, []token_type { .OPENING_BRACKET })
@@ -326,6 +385,7 @@ parse_call :: proc(stream: ^token_stream) -> (node: ast_node)
         param_node := parse_expression(stream)
         append(&node.children, param_node)
 
+        // TODO allows comma at end of params
         if peek_token(stream).type != .CLOSING_BRACKET
         {
             next_token(stream, []token_type { .COMMA })
@@ -333,6 +393,14 @@ parse_call :: proc(stream: ^token_stream) -> (node: ast_node)
     }
 
     next_token(stream, []token_type { .CLOSING_BRACKET })
+
+    return
+}
+
+parse_identifier :: proc(stream: ^token_stream) -> (node: ast_node)
+{
+    token := next_token(stream, []token_type { .IDENTIFIER })
+    node = ast_node { .IDENTIFIER, token.value, {}, token.line_number, token.column_number }
 
     return
 }
