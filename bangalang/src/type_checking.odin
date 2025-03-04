@@ -1,7 +1,6 @@
 package main
 
 import "core:fmt"
-import "core:os"
 import "core:strings"
 import "core:strconv"
 
@@ -32,11 +31,11 @@ type_check_program :: proc(nodes: [dynamic]ast_node) -> (ok: bool = true)
         }
     }
 
-    for node in nodes
+    for &node in nodes
     {
         if node.type != .PROCEDURE
         {
-            statement_ok := type_check_statement(node, &ctx)
+            statement_ok := type_check_statement(&node, &ctx)
             if !statement_ok
             {
                 ok = false
@@ -44,11 +43,11 @@ type_check_program :: proc(nodes: [dynamic]ast_node) -> (ok: bool = true)
         }
     }
 
-    for node in nodes
+    for &node in nodes
     {
         if node.type == .PROCEDURE
         {
-            procedure_ok := type_check_procedure(node, &ctx)
+            procedure_ok := type_check_procedure(&node, &ctx)
             if !procedure_ok
             {
                 ok = false
@@ -59,7 +58,7 @@ type_check_program :: proc(nodes: [dynamic]ast_node) -> (ok: bool = true)
     return
 }
 
-type_check_procedure :: proc(node: ast_node, parent_ctx: ^type_check_context) -> (ok: bool)
+type_check_procedure :: proc(node: ^ast_node, parent_ctx: ^type_check_context) -> (ok: bool)
 {
     child_index := 0
     name_node := node.children[child_index]
@@ -71,18 +70,18 @@ type_check_procedure :: proc(node: ast_node, parent_ctx: ^type_check_context) ->
         param_node := node.children[child_index]
         child_index += 1
 
-        scope_ctx.variable_types[param_node.value] = ""
+        scope_ctx.variable_types[param_node.value] = "i64"
     }
 
     scope_node := node.children[child_index]
     child_index += 1
 
-    ok = type_check_scope(scope_node, &scope_ctx)
+    ok = type_check_scope(&scope_node, &scope_ctx)
 
     return
 }
 
-type_check_statement :: proc(node: ast_node, ctx: ^type_check_context) -> (ok: bool)
+type_check_statement :: proc(node: ^ast_node, ctx: ^type_check_context) -> (ok: bool)
 {
     #partial switch node.type
     {
@@ -103,19 +102,18 @@ type_check_statement :: proc(node: ast_node, ctx: ^type_check_context) -> (ok: b
     case:
         fmt.println("BUG: Failed to type check statement")
         fmt.printfln("Invalid node at line %i, column %i", node.line_number, node.column_number)
-        os.exit(1)
     }
 
     return
 }
 
-type_check_if :: proc(node: ast_node, ctx: ^type_check_context) -> (ok: bool = true)
+type_check_if :: proc(node: ^ast_node, ctx: ^type_check_context) -> (ok: bool = true)
 {
     child_index := 0
     expression_node := node.children[child_index]
     child_index += 1
 
-    expression_ok := type_check_expression(expression_node, ctx)
+    expression_ok := type_check_expression(&expression_node, ctx)
     if !expression_ok
     {
         ok = false
@@ -124,7 +122,7 @@ type_check_if :: proc(node: ast_node, ctx: ^type_check_context) -> (ok: bool = t
     if_scope_node := node.children[child_index]
     child_index += 1
 
-    if_scope_ok := type_check_scope(if_scope_node, ctx)
+    if_scope_ok := type_check_scope(&if_scope_node, ctx)
     if !if_scope_ok
     {
         ok = false
@@ -135,7 +133,7 @@ type_check_if :: proc(node: ast_node, ctx: ^type_check_context) -> (ok: bool = t
         else_if_expression_node := node.children[child_index]
         child_index += 1
 
-        else_if_expression_ok := type_check_expression(else_if_expression_node, ctx)
+        else_if_expression_ok := type_check_expression(&else_if_expression_node, ctx)
         if !else_if_expression_ok
         {
             ok = false
@@ -144,7 +142,7 @@ type_check_if :: proc(node: ast_node, ctx: ^type_check_context) -> (ok: bool = t
         else_if_scope_node := node.children[child_index]
         child_index += 1
 
-        else_if_scope_ok := type_check_scope(else_if_scope_node, ctx)
+        else_if_scope_ok := type_check_scope(&else_if_scope_node, ctx)
         if !else_if_scope_ok
         {
             ok = false
@@ -156,7 +154,7 @@ type_check_if :: proc(node: ast_node, ctx: ^type_check_context) -> (ok: bool = t
         else_scope_node := node.children[child_index]
         child_index += 1
 
-        else_scope_ok := type_check_scope(else_scope_node, ctx)
+        else_scope_ok := type_check_scope(&else_scope_node, ctx)
         if !else_scope_ok
         {
             ok = false
@@ -166,20 +164,20 @@ type_check_if :: proc(node: ast_node, ctx: ^type_check_context) -> (ok: bool = t
     return
 }
 
-type_check_for :: proc(node: ast_node, ctx: ^type_check_context) -> (ok: bool = true)
+type_check_for :: proc(node: ^ast_node, ctx: ^type_check_context) -> (ok: bool = true)
 {
     if node.children[0].type == .DECLARATION
     {
         // TODO should be scoped to for loop
         declaration_node := node.children[0]
-        declaration_ok := type_check_declaration(declaration_node, ctx)
+        declaration_ok := type_check_declaration(&declaration_node, ctx)
         if !declaration_ok
         {
             ok = false
         }
 
         expression_node := node.children[1]
-        expression_ok := type_check_expression(expression_node, ctx)
+        expression_ok := type_check_expression(&expression_node, ctx)
         if !expression_ok
         {
             ok = false
@@ -188,7 +186,7 @@ type_check_for :: proc(node: ast_node, ctx: ^type_check_context) -> (ok: bool = 
     else
     {
         expression_node := node.children[0]
-        expression_ok := type_check_expression(expression_node, ctx)
+        expression_ok := type_check_expression(&expression_node, ctx)
         if !expression_ok
         {
             ok = false
@@ -198,7 +196,7 @@ type_check_for :: proc(node: ast_node, ctx: ^type_check_context) -> (ok: bool = 
     if node.children[0].type == .DECLARATION
     {
         assignment_node := node.children[2]
-        assignment_ok := type_check_assignment(assignment_node, ctx)
+        assignment_ok := type_check_assignment(&assignment_node, ctx)
         if !assignment_ok
         {
             ok = false
@@ -206,7 +204,7 @@ type_check_for :: proc(node: ast_node, ctx: ^type_check_context) -> (ok: bool = 
     }
 
     scope_node := node.children[len(node.children) - 1]
-    scope_ok := type_check_scope(scope_node, ctx)
+    scope_ok := type_check_scope(&scope_node, ctx)
     if !scope_ok
     {
         ok = false
@@ -215,13 +213,13 @@ type_check_for :: proc(node: ast_node, ctx: ^type_check_context) -> (ok: bool = 
     return
 }
 
-type_check_scope :: proc(node: ast_node, parent_ctx: ^type_check_context) -> (ok: bool = true)
+type_check_scope :: proc(node: ^ast_node, parent_ctx: ^type_check_context) -> (ok: bool = true)
 {
     scope_ctx := copy_type_check_context(parent_ctx^, true)
 
-    for child_node in node.children
+    for &child_node in node.children
     {
-        statement_ok := type_check_statement(child_node, &scope_ctx)
+        statement_ok := type_check_statement(&child_node, &scope_ctx)
         if !statement_ok
         {
             ok = false
@@ -231,51 +229,78 @@ type_check_scope :: proc(node: ast_node, parent_ctx: ^type_check_context) -> (ok
     return
 }
 
-type_check_declaration :: proc(node: ast_node, ctx: ^type_check_context) -> (ok: bool)
+type_check_declaration :: proc(node: ^ast_node, ctx: ^type_check_context) -> (ok: bool)
 {
-    lhs_node := node.children[0]
-    rhs_node := node.children[1]
+    lhs_node := &node.children[0]
+    rhs_node := &node.children[1]
 
     if lhs_node.value in ctx.variable_types
     {
         fmt.println("Failed to type check declaration")
         fmt.printfln("Duplicate identifier '%s' at line %i, column %i", lhs_node.value, lhs_node.line_number, lhs_node.column_number)
-        os.exit(1)
+        ok = false
     }
 
     ok = type_check_expression(rhs_node, ctx)
-    ctx.variable_types[lhs_node.value] = ""
+    ctx.variable_types[lhs_node.value] = "i64"
+    lhs_node.data_type = ctx.variable_types[lhs_node.value]
+
+    if rhs_node.data_type != lhs_node.data_type
+    {
+        fmt.println("Failed to type check declaration")
+        fmt.printfln("Operand types do not match at line %i, column %i", node.line_number, node.column_number)
+        fmt.printfln("Left hand side: %s", lhs_node.data_type)
+        fmt.printfln("Right hand side: %s", rhs_node.data_type)
+        ok = false
+    }
+
+    node.data_type = lhs_node.data_type
 
     return
 }
 
-type_check_assignment :: proc(node: ast_node, ctx: ^type_check_context) -> (ok: bool)
+type_check_assignment :: proc(node: ^ast_node, ctx: ^type_check_context) -> (ok: bool)
 {
-    lhs_node := node.children[0]
-    rhs_node := node.children[1]
+    lhs_node := &node.children[0]
+    rhs_node := &node.children[1]
 
     if !(lhs_node.value in ctx.variable_types)
     {
         fmt.println("Failed to type check assignment")
         fmt.printfln("Undeclared identifier '%s' at line %i, column %i", lhs_node.value, lhs_node.line_number, lhs_node.column_number)
-        os.exit(1)
+        ok = false
     }
+
+    lhs_node.data_type = ctx.variable_types[lhs_node.value]
 
     ok = type_check_expression(rhs_node, ctx)
 
+    if rhs_node.data_type != lhs_node.data_type
+    {
+        fmt.println("Failed to type check assignment")
+        fmt.printfln("Operand types do not match at line %i, column %i", node.line_number, node.column_number)
+        fmt.printfln("Left hand side: %s", lhs_node.data_type)
+        fmt.printfln("Right hand side: %s", rhs_node.data_type)
+        ok = false
+    }
+
+    node.data_type = lhs_node.data_type
+
     return
 }
 
-type_check_return :: proc(node: ast_node, ctx: ^type_check_context) -> (ok: bool)
+type_check_return :: proc(node: ^ast_node, ctx: ^type_check_context) -> (ok: bool)
 {
     expression_node := node.children[0]
 
-    ok = type_check_expression(expression_node, ctx)
+    ok = type_check_expression(&expression_node, ctx)
+
+    node.data_type = expression_node.data_type
 
     return
 }
 
-type_check_expression :: proc(node: ast_node, ctx: ^type_check_context) -> (ok: bool = true)
+type_check_expression :: proc(node: ^ast_node, ctx: ^type_check_context) -> (ok: bool = true)
 {
     if node.type != .ADD && node.type != .SUBTRACT && node.type != .MULTIPLY && node.type != .DIVIDE
     {
@@ -286,22 +311,33 @@ type_check_expression :: proc(node: ast_node, ctx: ^type_check_context) -> (ok: 
     lhs_node := node.children[0]
     rhs_node := node.children[1]
 
-    lhs_ok := type_check_expression(lhs_node, ctx)
+    lhs_ok := type_check_expression(&lhs_node, ctx)
     if !lhs_ok
     {
         ok = false
     }
 
-    rhs_ok := type_check_expression(rhs_node, ctx)
+    rhs_ok := type_check_expression(&rhs_node, ctx)
     if !rhs_ok
     {
         ok = false
     }
 
+    if rhs_node.data_type != lhs_node.data_type
+    {
+        fmt.println("Failed to type check expression")
+        fmt.printfln("Operand types do not match at line %i, column %i", node.line_number, node.column_number)
+        fmt.printfln("Left hand side: %s", lhs_node.data_type)
+        fmt.printfln("Right hand side: %s", rhs_node.data_type)
+        ok = false
+    }
+
+    node.data_type = lhs_node.data_type
+
     return
 }
 
-type_check_primary :: proc(node: ast_node, ctx: ^type_check_context) -> (ok: bool)
+type_check_primary :: proc(node: ^ast_node, ctx: ^type_check_context) -> (ok: bool)
 {
     #partial switch node.type
     {
@@ -312,14 +348,17 @@ type_check_primary :: proc(node: ast_node, ctx: ^type_check_context) -> (ok: boo
         {
             fmt.println("Failed to type check primary")
             fmt.printfln("Undeclared identifier '%s' at line %i, column %i", node.value, node.line_number, node.column_number)
-            os.exit(1)
+            ok = false
         }
 
+        node.data_type = ctx.variable_types[node.value]
         ok = true
     case .INTEGER_LITERAL:
+        node.data_type = "i64"
         ok = true
     case .NEGATE:
-        ok = type_check_primary(node.children[0], ctx)
+        ok = type_check_primary(&node.children[0], ctx)
+        node.data_type = node.children[0].data_type
     case:
         ok = type_check_expression(node, ctx)
     }
@@ -327,7 +366,7 @@ type_check_primary :: proc(node: ast_node, ctx: ^type_check_context) -> (ok: boo
     return
 }
 
-type_check_call :: proc(node: ast_node, ctx: ^type_check_context) -> (ok: bool = true)
+type_check_call :: proc(node: ^ast_node, ctx: ^type_check_context) -> (ok: bool = true)
 {
     child_index := 0
     name_node := node.children[child_index]
@@ -355,7 +394,7 @@ type_check_call :: proc(node: ast_node, ctx: ^type_check_context) -> (ok: bool =
     {
         fmt.println("Failed to type check call")
         fmt.printfln("Undeclared identifier '%s' at line %i, column %i", name_node.value, name_node.line_number, name_node.column_number)
-        os.exit(1)
+        ok = false
     }
 
     for child_index < len(node.children)
@@ -363,12 +402,14 @@ type_check_call :: proc(node: ast_node, ctx: ^type_check_context) -> (ok: bool =
         param_node := node.children[child_index]
         child_index += 1
 
-        expression_ok := type_check_expression(param_node, ctx)
+        expression_ok := type_check_expression(&param_node, ctx)
         if !expression_ok
         {
             ok = false
         }
     }
+
+    node.data_type = "i64"
 
     return
 }

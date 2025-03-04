@@ -26,6 +26,7 @@ ast_node :: struct
 {
     type: ast_node_type,
     value: string,
+    data_type: string,
     children: [dynamic]ast_node,
     line_number: int,
     column_number: int
@@ -400,7 +401,7 @@ parse_call :: proc(stream: ^token_stream) -> (node: ast_node)
 parse_identifier :: proc(stream: ^token_stream) -> (node: ast_node)
 {
     token := next_token(stream, []token_type { .IDENTIFIER })
-    node = ast_node { .IDENTIFIER, token.value, {}, token.line_number, token.column_number }
+    node = ast_node { .IDENTIFIER, token.value, "", {}, token.line_number, token.column_number }
 
     return
 }
