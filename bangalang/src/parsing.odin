@@ -19,7 +19,7 @@ ast_node_type :: enum
     NEGATE,
     CALL,
     IDENTIFIER,
-    INTEGER_LITERAL
+    NUMBER
 }
 
 ast_node :: struct
@@ -67,6 +67,11 @@ parse_procedure :: proc(stream: ^token_stream) -> (node: ast_node)
     for peek_token(stream).type != .CLOSING_BRACKET
     {
         param_node := parse_identifier(stream)
+
+        next_token(stream, []token_type { .COLON })
+
+        param_node.data_type = next_token(stream, []token_type { .DATA_TYPE }).value
+
         append(&node.children, param_node)
 
         // TODO allows comma at end of params
@@ -77,6 +82,9 @@ parse_procedure :: proc(stream: ^token_stream) -> (node: ast_node)
     }
 
     next_token(stream, []token_type { .CLOSING_BRACKET })
+    next_token(stream, []token_type { .ARROW })
+
+    node.data_type = next_token(stream, []token_type { .DATA_TYPE }).value
 
     scope_node := parse_scope(stream)
     append(&node.children, scope_node)
@@ -238,9 +246,16 @@ parse_declaration :: proc(stream: ^token_stream) -> (node: ast_node)
     node.column_number = peek_token(stream).column_number
 
     lhs_node := parse_identifier(stream)
-    append(&node.children, lhs_node)
 
     next_token(stream, []token_type { .COLON })
+
+    if peek_token(stream).type == .DATA_TYPE
+    {
+        lhs_node.data_type = next_token(stream, []token_type { .DATA_TYPE }).value
+    }
+
+    append(&node.children, lhs_node)
+
     next_token(stream, []token_type { .EQUALS })
 
     rhs_node := parse_expression(stream)
@@ -351,7 +366,7 @@ parse_primary :: proc(stream: ^token_stream) -> (node: ast_node)
         return
     }
 
-    token := next_token(stream, []token_type { .IDENTIFIER, .INTEGER_LITERAL })
+    token := next_token(stream, []token_type { .IDENTIFIER, .NUMBER })
 
     node.value = token.value
 
@@ -359,8 +374,8 @@ parse_primary :: proc(stream: ^token_stream) -> (node: ast_node)
     {
     case .IDENTIFIER:
         node.type = .IDENTIFIER
-    case .INTEGER_LITERAL:
-        node.type = .INTEGER_LITERAL
+    case .NUMBER:
+        node.type = .NUMBER
     case:
         fmt.println("Failed to parse primary")
         fmt.printfln("Invalid token '%s' at line %i, column %i", token.value, token.line_number, token.column_number)

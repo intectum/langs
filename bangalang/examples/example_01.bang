@@ -1,15 +1,15 @@
-x := 57
+x: i64 = 57
 y := x
 y = 34
 
 {
     y = 77
-    z := 10
+    z: i32 = 10
 }
 
 z := y
 
-result := -((7 + 3) * 2) + 40
+result: i64 = -((7 + 3) * 2) + 40
 
 result = 0
 
@@ -47,16 +47,16 @@ else
     result = 9
 }
 
-sum_0 := 0
-index_0 := 10
+sum_0: i64 = 0
+index_0: i64 = 10
 for index_0
 {
     sum_0 = sum_0 + index_0
     index_0 = index_0 - 1
 }
 
-sum_1 := 0
-for index_1 := 10, index_1, index_1 = index_1 - 1
+sum_1: i64 = 0
+for index_1: i64 = 10, index_1, index_1 = index_1 - 1
 {
     sum_1 = sum_1 + index_1
 }
@@ -65,21 +65,35 @@ sum_1_plus_1 := plus_one(add(2, 5))
 
 foo := plus_one(sum_1) + 4 * add(2, 5)
 
-return pow(3, 3)
+return pow32(3, 3)
 
-plus_two := proc(num)
+plus_two := proc(num: i64) -> i64
 {
     return num + 2
 }
 
-do_plus_two := proc(num)
+do_plus_two := proc(num: i64) -> i64
 {
-    bar := 0
+    bar: i32 = 0
 
     return plus_two(num)
 }
 
-pow := proc(num, exp)
+pow32 := proc(num: i32, exp: i32) -> i32
+{
+    result := num
+
+    exp = exp - 1
+    for exp
+    {
+        result = result * num
+        exp = exp - 1
+    }
+
+    return result
+}
+
+pow64 := proc(num: i64, exp: i64) -> i64
 {
     result := num
 
